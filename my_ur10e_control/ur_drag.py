@@ -72,7 +72,7 @@ def listen_keyboard():
                 stop_drag_flag = False
                 auto_callback_flag = True
                 print("=======等待外部力和回调=======")
-        except AttributeEqrror:
+        except AttributeError:
             pass  # 处理其他特殊按键
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()  # 开始监听键盘事件
