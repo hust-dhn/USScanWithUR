@@ -164,13 +164,13 @@ def main():
     # 计算相机到机器人末端的外参（旋转矩阵和平移向量）
     R_avg, T_avg = calibration.calculate_camera_to_robot_transform(image_points, object_points_list)
 
-    # 计算相机到机器人基坐标系的转换矩阵
-    R_base, T_base = calibration.calculate_transform_from_robot_to_base(R_avg, T_avg)
+    # # 计算相机到机器人基坐标系的转换矩阵
+    # R_base, T_base = calibration.calculate_transform_from_robot_to_base(R_avg, T_avg)
 
     # 输出最终结果
-    print("Camera to Robot Base Transformation:")
-    print("Rotation Matrix R:\n", R_base)
-    print("Translation Vector T:\n", T_base)
+    print("Camera to Robot Transformation:")
+    print("Rotation Matrix R:\n", R_avg)
+    print("Translation Vector T:\n", T_avg)
 
 if __name__ == "__main__":
     main()
