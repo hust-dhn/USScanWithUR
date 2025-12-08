@@ -1,0 +1,28 @@
+# Inuitive NU4000 相机参数配置
+
+# 相机基本配置
+camera:
+  mode: "RGB"           # 工作模式: RGB, DEPTH, IR, ALL
+  fps: 30               # 帧率
+  auto_exposure: true   # 自动曝光
+  exposure_time: 10000  # 曝光时间(微秒)，当auto_exposure=false时生效
+
+# RGB图像配置
+rgb:
+  width: 640           # 图像宽度
+  height: 480           # 图像高度
+  format: "BGR"         # 图像格式: BGR, RGB, YUYV
+  enable: true          # 启用RGB流
+
+# 深度图像配置（可选）
+depth:
+  enable: false         # 是否启用深度流
+
+# 红外图像配置（可选）
+ir:
+  enable: false         # 是否启用红外流
+
+# USB配置
+usb:
+  timeout: 5000         # USB操作超时(毫秒)
+  buffer_size: 10       # 缓冲区大小
