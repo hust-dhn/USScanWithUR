@@ -63,6 +63,8 @@ if __name__ == "__main__":
     sensor = InuSensor()
     hw_information = sensor.init()
     channels_size, hw_information = sensor.start(hw_information)
+    print(f"hw_information: {hw_information}")
+    print(f"channels_size: {channels_size}")
     sensor.register = _sensor_callback_func
     print(f"Sensor initialization finished")
     # stream = sensor.create_stream(StreamType.DEPTH)

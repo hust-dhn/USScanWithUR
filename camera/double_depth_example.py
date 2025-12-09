@@ -13,8 +13,6 @@ import threading
 
 frame_counter = 0
 
-
-
 # #########################################################  main #####################################################
 def _sensor_callback_func(self, sensor: InuSensor, connection_state: ConnectionState, error: Error) -> None:
     print(f'Sensor callback ConnectionState={connection_state} Error={error}')
@@ -95,8 +93,8 @@ def capture_from_camera(camera_id: int, sensor: InuSensor, stream_type: StreamTy
 
 if __name__ == "__main__":
     # 创建两个相机实例
-    sensor1 = InuSensor()
-    sensor2 = InuSensor()
+    sensor1 = InuSensor("3251155")
+    sensor2 = InuSensor("3985650")
 
     # 创建两个线程来并行运行相机捕获任务
     thread1 = threading.Thread(target=capture_from_camera, args=(1, sensor1, StreamType.GENERAL_CAMERA, _general_camera_callback_func))
