@@ -96,3 +96,4 @@ InuError = inu_streams.InuError
 SlamTransformationsP = inu_streams.SlamTransformationsP
 StereoS = inu_streams.StereoS
 TemperatureS = inu_streams.TemperatureS
+ImageRegisteredS = inu_streams.ImageRegisteredS

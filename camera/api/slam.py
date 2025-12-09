@@ -134,6 +134,18 @@ class SetMode(IntEnum):
     SET_RESET_DATABASE_SET_POSE = SlamS.ESlamSetMode.SetResetDatabaseSetPose
 
 
+class DebugTraceMode(IntEnum):
+    """! DebugTraceMode enum class.
+        Role: Slam debug trace mode.
+    """
+    # @ brief     Default Slam trace debug mode - will take value from InuServiceParams.xml <Slam><DebugTrace>.
+    DEFAULT = SlamS.EDebugTraceMode.Default
+    # @ brief     Slam trace debug mode enabled.
+    ENABLE = SlamS.EDebugTraceMode.Enable
+    # @ brief     Slam trace debug mode disabled.
+    DISABLE = SlamS.EDebugTraceMode.Disable
+
+
 class SlamTransformationsParams:
     """!  Transformations Params.
 
@@ -143,12 +155,15 @@ class SlamTransformationsParams:
 
     _params: SlamTransformationsP = None
 
-    def __init__(self, params: SlamTransformationsP):
+    def __init__(self, params: SlamTransformationsP = None):
         """! The Slam stream class initializer. @param params  The InuStreamsPyth.SlamTransformationsParams.
         @return  An instance of the Slam stream initialized with the specified
                 InuStreamsPyth.SlamTransformationsParams object.
         """
-        self._params = params
+        if params is None:
+            self._params = SlamTransformationsP()
+        else:
+            self._params = params
 
     @property
     def camera_system(self) -> SlamCoordinateSystem:
@@ -228,33 +243,34 @@ class SlamStream(BaseStream):
         BaseStream.__init__(self, stream)
         self._stream = stream
 
-    def init(self, transformations_params: SlamTransformationsParams = None) -> None:
+    def init(self, transformations_params: SlamTransformationsParams = None, expose_map: bool = False,
+             debug_trace: DebugTraceMode = DebugTraceMode.DEFAULT) -> None:
         # @brief    Service initialization.
         #
         # Hall be invoked once before starting frames acquisition.
         # @param  format            The Output format that should be invoked.
         if transformations_params is None:
-            self._stream.Init()
-        else:
-            self._stream.Init(transformations_params.params)
-
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
+            transformations_params = SlamTransformationsParams()
+        self._stream.Init(transformations_params._params, expose_map, SlamS.EDebugTraceMode(debug_trace))
 
     def register(self, callback) -> None:
         """!
-            Registration/De registration for receiving stream frames (push)
+             Registration/De registration for receiving stream frames (push)
 
-            The provided callback function is called when a new frame is ready (non-blocking).
-            It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
-            @param  callback  The Callback function which is invoked when a new frame is ready. Send nullptr to
-                unregister for receiving frames.
-        """
+             All streams should use the same callback function when calling for “register”.
+             You can find an example for a callback function here: “multithread_callback_example.py” where
+              “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+              on the stream type.
+
+             The provided callback function is called when a new frame is ready (non-blocking).
+             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
+             If you need more than 1 stream you have to give in number of streams only 1 Callback function and after
+             checking Stream type inside perform needed process.
+             The parameters of this function are:
+             @param  callback  The Callback function which is invoked when a new frame is ready.
+              Send None to unregister for receiving frames.
+         """
+
         def _callback_cast(stream: SlamS, frame: SlamF, error: InuError) -> None:
             """!
                 Prototype of callback function which is used by the Register method.
@@ -267,7 +283,10 @@ class SlamStream(BaseStream):
             """
             BaseStream.callback(SlamStream(stream), SlamFrame(frame), Error(error))
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
+        if callback is None:
+            self._stream.Register(None)
+        else:
+            self._stream.Register(_callback_cast)
     register = property(None, register)
 
     @property

@@ -9,16 +9,16 @@ class DisparityParams:
     """
     # @brief    InuStreamsPyth.DisparityP
     #
-    _params = None
+    params = None
 
     def __init__(self, params: DisparityP = None):
         # @brief     The DepthProperties class initializer.
         #
         # @return  An instance of the DisparityParams object.
         if params is None:
-            self._params = DisparityP()
+            self.params = DisparityP()
         else:
-            self._params = params
+            self.params = params
 
     @property
     def confidence_threshold_region1(self) -> int:
@@ -26,12 +26,12 @@ class DisparityParams:
         #   used in Host disparity2depth algorithm.
         #
         # @return confidence_threshold_region1 as int
-        return self._params.confidence_threshold_region1
+        return self.params.confidence_threshold_region1
 
     @confidence_threshold_region1.setter
     def confidence_threshold_region1(self, value: int) -> None:
         # @brief    confidence_threshold_region1 setter
-        self._params.confidence_threshold_region1 = value
+        self.params.confidence_threshold_region1 = value
 
     @property
     def confidence_threshold_region2(self) -> int:
@@ -40,48 +40,48 @@ class DisparityParams:
         #     values will not be used in Host disparity2depth algorithm.
         #
         # @return confidence_threshold_region2 as int
-        return self._params.confidence_threshold_region2
+        return self.params.confidence_threshold_region2
 
     @confidence_threshold_region2.setter
     def confidence_threshold_region2(self, value: int) -> None:
         # @brief    confidence_threshold_region2 setter
-        self._params.confidence_threshold_region2 = value
+        self.params.confidence_threshold_region2 = value
 
     @property
     def max_distance(self) -> int:
         # @brief    Maximum depth in mm, depth above this value will be invalidated.
         #
         # @return max_distance as int
-        return self._params.max_distance
+        return self.params.max_distance
 
     @max_distance.setter
     def max_distance(self, value: int) -> None:
         # @brief    max_distance setter
-        self._params.max_distance = value
+        self.params.max_distance = value
 
     @property
     def depth_scale(self) -> int:
         # @brief    Depth scaling factor, 1.0f is to get depth in mm (default).
         #
         # @return depth_scale as int
-        return self._params.depth_scale
+        return self.params.depth_scale
 
     @depth_scale.setter
     def depth_scale(self, value: int) -> None:
         # @brief    depth_scale setter
-        self._params.depth_scale = value
+        self.params.depth_scale = value
 
     @property
     def point_cloud_scale(self) -> int:
         # @brief    Point cloud scaling factor, 0.001f is to get point cloud in meters (default).
         #
         # @return point_cloud_scale as int
-        return self._params.point_cloud_scale
+        return self.params.point_cloud_scale
 
     @point_cloud_scale.setter
     def point_cloud_scale(self, value: int) -> None:
         # @brief    point_cloud_scale setter
-        self._params.point_cloud_scale = value
+        self.params.point_cloud_scale = value
 
 
 class TemporalFilterParams:
@@ -281,57 +281,57 @@ class BlobFilterParams:
         # @ Blob mode 3 – fill small patches
         # @ Blob mode 4 – both mode 2 and mode 3
         # @return blob_mode as int.
-        return self._params.blob_mode
+        return self._params.mode
 
     @blob_mode.setter
     def blob_mode(self, value: int) -> None:
         # @brief    blob_mode setter.
-        self._params.blob_mode = value
+        self._params.mode = value
 
     @property
     def blob_max_size(self) -> int:
         # @ Maximum number of pixels which be considered as Blob.
         # @ Less than this number will be a candidate to filtering, larger than this value will be not a candidate
         #   to be blob for filtering.
-        return self._params.blob_max_size
+        return self._params.max_size
 
     @blob_max_size.setter
     def blob_max_size(self, value: int) -> None:
         # @brief    blob_max_size setter.
-        self._params.blob_max_size = value
+        self._params.max_size = value
 
     @property
     def blob_max_height(self) -> int:
         # @ The maximum number of rows which be considered as Blob.
         # @ Less than this number will be a candidate to filtering, larger than this value will be not a candidate
         #   to be blob for filtering.
-        return self._params.blob_max_height
+        return self._params.max_height
 
     @blob_max_height.setter
     def blob_max_height(self, value: int) -> None:
         # @brief    blob_max_height setter.
-        self._params.blob_max_height = value
+        self._params.max_height = value
 
     @property
     def blob_disparity_threshold(self) -> int:
         # @ Blob algorithm : disparity threshold, will be executed as pre - process
-        return self._params.blob_disparity_threshold
+        return self._params.disparity_threshold
 
     @blob_disparity_threshold.setter
     def blob_disparity_threshold(self, value: int) -> None:
         # @brief    blob_disparity_threshold setter.
-        self._params.blob_disparity_threshold = value
+        self._params.disparity_threshold = value
 
     @property
-    def blob_max_height(self) -> int:
+    def disp_diff_same_blob(self) -> float:
         # @This parameter represents the max difference for pixels disparity to be considered as the same Blob.
         # @As this parameter is bigger more pixels will labeled as the same blob.
-        return self._params.blob_max_height
+        return self._params.disp_diff_same_blob
 
-    @blob_max_height.setter
-    def blob_max_height(self, value: int) -> None:
+    @disp_diff_same_blob.setter
+    def disp_diff_same_blob(self, value: float) -> None:
         # @brief    blob_max_height setter.
-        self._params.blob_max_height = value
+        self._params.disp_diff_same_blob = value
 
 
 class DepthProperties:
@@ -347,11 +347,27 @@ class DepthProperties:
     _depth_properties = None
 
     def __init__(self, stream):
-        self.depthProperties = stream
+        self._depth_properties = stream
         """! The DepthProperties class initializer.
             @param stream  The InuStreamsPyth.DepthStream or InuStreamsPyth.ImageStream.
             @return  An instance of the DepthProperties initialized with the specified stream object.
         """
+
+    @property
+    def default_post_processing_depth_mode(self) -> int:
+        # @brief default_post_processing_depth_mode getter
+        #
+        # @Detailed description:        Get current DefaultPostProcessingMode
+        # @return                       The DefaultPostProcessingMode value
+        return self._depth_properties.DefaultPostProcessingMode
+
+    @property
+    def post_processing_depth_mode(self) -> int:
+        # @brief disparity_params getter
+        #
+        # @Detailed description:        Get current PostProcessingDepthMode
+        # @return                       The PostProcessingDepthMode value
+        return self._depth_properties.PostProcessingDepthMode
 
     @property
     def disparity_params(self) -> DisparityParams:
@@ -365,10 +381,10 @@ class DepthProperties:
     def disparity_params(self, value: DisparityParams) -> None:
         # @brief    disparity_params setter
         #
-        # @Detailed description:    Send the TemporalFilterParams to temporal filter.
+        # @Detailed description:    Send the DisparityParams to temporal filter.
         #                           By default, is set from InuServiceParams.xml
         # @param[in] value	        New DisparityParams
-        self._depth_properties.DisparityParams.params = value
+        self._depth_properties.DisparityParams = value.params
 
     @property
     def temporal_filter_params(self) -> TemporalFilterParams:
@@ -483,4 +499,5 @@ class CroppingROI:
         # Moving the rectangle outside the bookbinderies of the viewable area will cause the image to freeze. @param
         # start:     The position in Point2Dim of the upper left corner of the rectangle
         self.cropping.SetCroppingROI(start.x, start.y)
+
     _cropping_roi = property(None, cropping_roi)

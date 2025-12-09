@@ -18,7 +18,6 @@ class ErrorCode(IntEnum):
     SERVICE_NOT_INITALIAZED = EErrorCode.ServiceNotInitaliazed
     USB_DISCONNECT = EErrorCode.USBDisconnect
     USB_CONNECT = EErrorCode.USBConnect
-    STREAM_DISCONNECTED = EErrorCode.StreamDisconnected
     CHANNEL_ID_INVALID = EErrorCode.ChannelIDInvalid
     NEGATIVE_DISPARITY_OFFSET = EErrorCode.NegativeDisparityOffset
     NO_MATCHING_FORMAT = EErrorCode.NoMatchingFormat
@@ -39,14 +38,13 @@ class ErrorCode(IntEnum):
     CROP_WIDTH_SHOULD_BE_16_MULTIPLIER = EErrorCode.CropWidthShouldBe16multiplier
     INVALID_FRAME_FROM_SERVICE = EErrorCode.InvalidFrameFromService
     INVALID_CHANNEL_FORMAT = EErrorCode.InvalidChannelFormat
-    SET_CHANNEL_FORMAT_NOT_SUPPORTED = EErrorCode.SetChannelFormatNotSupported
     UNSUPPORTED_PLATFORM = EErrorCode.UnsupportedPlatform
     CONFIDENCE_UNSUPPORTED = EErrorCode.ConfidenceUnsupported
+    FAILED_TO_INIT_LIBRARY = EErrorCode.FailedToInitLibrary
     MISSSING_STORAGE_EXCEPTION = EErrorCode.MisssingStorage
     MISSSING_TABLE_EXCEPTION = EErrorCode.MisssingTable
     MISSSING_KEY_EXCEPTION = EErrorCode.MisssingKey
     SAVE_EXCEPTION = EErrorCode.Save
-
     INIT_EXCEPTION = EErrorCode.Init
     FINALIZE_EXCEPTION = EErrorCode.Finalize
     START_EXCEPTION = EErrorCode.Start
@@ -68,62 +66,15 @@ class ErrorCode(IntEnum):
     FPS_MISSMATCH_ERROR = EErrorCode.FPSMissMatchError
     FAILED_2_CONNECT_WITH_SENSOR = EErrorCode.Failed2ConnectWithSensor
     FAILED_BIND_NODS = EErrorCode.FailedBindNods
-
-    CREATE_SERVICE_ERROR = EErrorCode.CreateService
-    CREATE_REGONIZER_ERROR = EErrorCode.CreateRegonizer
-    SETTING_REGONIZER_ERROR = EErrorCode.SettingRegonizer
-    INIT_RECOGNIZER_ERROR = EErrorCode.InitRecognizer
-    CREATE_SEARCH_ERROR = EErrorCode.CreateSearch
-    SETTING_SEARCH_ERROR = EErrorCode.SettingSearch
-    RECOGNITION_ERROR = EErrorCode.Recognition
-    RECOGNITION_CLIPPED_ERROR = EErrorCode.RecognitionClipped
-    WAVE_FILE_ERR = EErrorCode.WaveFile
-    RECOG_SAMPLE_CONVERT_ERROR = EErrorCode.RecogSampleConvert
-    RECOG_PIP_EERROR = EErrorCode.RecogPipe
-
     BAD_INJECTION_STREAM = EErrorCode.BadInjectionStream
     INJECTION_ERROR = EErrorCode.Injection
     FAILED_WRITE_INJECTION_ERROR = EErrorCode.FailedWriteInjection
-
     EVENT_WAIT_TIMEOUT_ERROR = EErrorCode.EventWaitTimeout
     STREAM_WRONG_STATE = EErrorCode.StreamWrongState
     REQUEST_CANCELED = EErrorCode.RequestCanceled
-
-    IN_CALIBRATION_MODE_ERROR = EErrorCode.InCalibrationMode
-
-    IN_CONFIGURATION_ERROR = EErrorCode.InConfiguration
-    HANDS_PROCESSING = EErrorCode.HandsProcessing
-    HANDS_INIT_SCENE = EErrorCode.HandsInitScene
-
-    ILLEGAL_AGC_VALUE = EErrorCode.IllegalAGCValue
-    IN_CALIBRATION_PROCESS = EErrorCode.InCalibrationProcess
-    CALIBARATION_ERROR = EErrorCode.Calibaration
-    CALIBRATION_TOO_LONG = EErrorCode.CalibrationTooLong
-    NO_AGC_FILTER = EErrorCode.NoAGCFilter
-    AUTO_CONTROL_ERROR = EErrorCode.AutoControl
-    AGC_CONFIG_FILE_ERROR = EErrorCode.AGCConfigFile
-
-    MISSING_CONFIG_FILES = EErrorCode.MissingConfigFiles
-    FAILED_TO_INIT_LIBRARY = EErrorCode.FailedToInitLibrary
-    CONVERSION_ERROR = EErrorCode.Conversion
-    FRAME_ANALYSIS_ERROR = EErrorCode.FrameAnalysis
-    LIBRARY_ISNT_INITIALIZED = EErrorCode.LibraryIsntInitialized
-
-    HEAD_ALGORITHM_FAILED = EErrorCode.HeadAlgorithmFailed
-
-    FR_INIT = EErrorCode.FRInit
-    FR_PROCESS = EErrorCode.FRProcess
-    ENROLL_NOT_STARTED = EErrorCode.EnrollNotStarted
-    ENROLL_PROCESS = EErrorCode.EnrollProcess
-    ENROLL_PROCESS_ERROR = EErrorCode.EnrollProcess
-    ENROLL_DIR_DOESNT_EXIST = EErrorCode.EnrollDirDoesntExist
-
     INTERLEAVE_MISSMATCH = EErrorCode.InterleaveMissMatch
-
-    RECORDING_ALREADY_STARTED = EErrorCode.RecordingAlreadyStarted
     NO_FILES_TO_PLAY = EErrorCode.NoFilesToPlay
     RECORDING_ERROR = EErrorCode.RcordingError
-
     COMPRESSION_ERROR = EErrorCode.Compression
     DECOMPRESSION_ERROR = EErrorCode.Decompression
     READ_FROM_FLASH = EErrorCode.ReadFromFlash
@@ -136,11 +87,6 @@ class ErrorCode(IntEnum):
     FLASH_DYNAMIC_CALIB_PRE_COND = EErrorCode.FlashDynamicCalibPreCond
     ERASE_DYNAMIC_CALIB = EErrorCode.EraseDynamicCalib
     FLASH_DYNAMIC_CALIB = EErrorCode.FlashDynamicCalib
-
-    DI_MODE_IS_NOT_SUPPORTED = EErrorCode.DIModeIsNotSupported
-    DI_MODE_AND_VIDEO_MISMATCH = EErrorCode.DIModeAndVideoMismatch
-    DI_MODE_ALGORITHM_ERROR = EErrorCode.DIModeAlgorithmError
-    DEPTH_FROM_CEVA_CONFIG_FILE_ERROR = EErrorCode.DepthFromCevaConfigFile
     BAD_POINT_CLOUD_FPS = EErrorCode.BadPointCloudFPS
     DROPPED_POINT_CLOUD_FRAME = EErrorCode.DroppedPointCloudFrame
     BAD_POINT_CLOUD_DECIMATION_FACTOR = EErrorCode.BadPointCloudDecimationFactor
@@ -150,7 +96,6 @@ class ErrorCode(IntEnum):
     STATIC_TEMPORAL_FILTER_ALREADY_STARTED = EErrorCode.StaticTemporalFilterAlreadyStarted
     TEMPORAL_FILTER_ALREADY_STARTED = EErrorCode.TemporalFilterAlreadyStarted
     TEMPORAL_FILTER_FAILED_TO_START_IN_FW = EErrorCode.TemporalFilterFailedToStartInFW
-
     NO_SENSOR_CONFIGURATION = EErrorCode.NoSensorConfiguration
     NO_WEB_CAM_OPTICAL_DATA = EErrorCode.NoWebCamOpticalData
     FAILED_LOADING_INU_MODELS_DB = EErrorCode.FailedLoadingInuModelsDB
@@ -159,20 +104,6 @@ class ErrorCode(IntEnum):
     UNEXPECTED_NEGATIVE_BASELINE = EErrorCode.UnexpectedNegativeBaseline
     IN_CALIBRATION_MODE_CALIBRATION_DATA_NOT_LOADED = EErrorCode.InCalibrationModeCalibrationDataNotLoaded
     INTERLEAVE_MODE_NOT_SUPPORTED_BY_CHANNEL = EErrorCode.InterleaveModeNotSupportedByChannel
-
-    FAILED_TO_GET_IMU_HEADER = EErrorCode.FailedToGetIMUHeader
-    ZERO_IMU_CHANNELS = EErrorCode.ZeroIMUChannels
-    FAILED_TO_SET_IMU_FPS = EErrorCode.FailedToSetIMUFPS
-    IN_FIELD_IMU_ALGO_IS_NOT_SUPPORTED = EErrorCode.InfieldIMUAlgoIsNotSupported
-    ROTATION_NOT_DETECTED = EErrorCode.RotationNotDetected
-    REST_WINDOW_TOOS_MALL = EErrorCode.RestWindowTooSmall
-    NOT_ENOUGH_DATA_IN_CSV = EErrorCode.NotEnoughDataInCSV
-
-    FT_IS_NOT_SUPPORTED = EErrorCode.FTIsNotSupported
-
-    PROCESSING_PAUSED = EErrorCode.ProcessingPaused
-    CNN_FILE_OPEN_FAILED = EErrorCode.CnnFileOpenFailed
-    CNN_ACK_READ_FAILED = EErrorCode.CnnAckReadFailed
     INIT_AI_LIBRARY_FAILED = EErrorCode.InitAILibraryFailed
     FACE_RECOGNITION_AI = EErrorCode.FaceRecognitionAI
     OBJECTS_DETECTION_AI = EErrorCode.ObjectsDetectionAI
@@ -180,10 +111,10 @@ class ErrorCode(IntEnum):
     CNN_START_FAILED = EErrorCode.CnnStartFailed
     CNN_STOP_FAILE = EErrorCode.CnnStartFailed
     CNN_RELEASE_NETWORKS_FAILED = EErrorCode.CnnReleaseNetworksFailed
-
     ALTERNATE_PROJECTOR_NOT_SUPPORTED = EErrorCode.AlternateProjectorNotSupported
-
     SLAM_BY_ALGO_REQUIRE_INTERLEAVE = EErrorCode.SlamByAlgoRequiersInterleave
+    ENROLL_NOT_STARTED = EErrorCode.EnrollNotStarted
+    ENROLL_PROCESS = EErrorCode.EnrollProcess
 
 
 class Error:

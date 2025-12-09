@@ -1,27 +1,49 @@
 from .base_stream import BaseStream
 from .depth_stream import DepthStream, DepthOutputFormat, DepthPostProcessing
+from .image_stream_registered import ImageStreamRegistered
 from .image_stream import ImageStream, ImageOutputFormat, ImagePostProcessing
 from .stereo import StereoStream, StereoOutputFormat
 from .features_tracking import FeaturesTrackingStream, FeaturesTrackingFrame, FeaturesTrackingOutputFormat
 from .imu import ImuStream
-from .slam import SlamStream, SlamTransformationsParams
+from .slam import SlamStream, SlamTransformationsParams, DebugTraceMode
 from .injection import InjectionStream
 from .histogram import HistogramStream
 from .cnn_app import CnnAppStream, CnnAppOutputFormat
 from .cnn import CnnStream
-from .point_cloud import PointCloudStream, VoxelFilterParams, PointCloudRegistrationType
+from .point_cloud import PointCloudStream, VoxelFilterParams, SegmentationParams
 from .temperature import TemperatureStream, SensorTemperatureType
 from .cnn_defs import CnnParams
 from .errors import Error
-from .hw_info import HwInfo
+from .hw_info import HwInfo, SensorResolution, ChannelControlParams
+from .super_frame import SuperFrame, SuperFramesSyncStrategy
 from .calibration_data import CalibrationData
 from .shared import StreamType, ProjectorType, ProjectorLevel, SensorControlParams, AutoExposureParams, CropParams, \
     ChannelDimensions, AlternateProjectorMode, Point2Dim
 from .InuStreamsPyth import MapUintPoint, Sensor, VectorROIParams, MapEntitiesIDVersion, ESensorResolution, \
-    EInjectionType, DeviceParamsExt, InuError
-    
+    EInjectionType, DeviceParamsExt, InuError, ImageS, DepthS, VectorDpeParams, MapStringString, SuperF, \
+    VectorBStreams, BaseS, MapUintChannelControl
 from typing import Union
 from enum import IntEnum
+from typing import Set
+from typing import Tuple
+from typing import Dict, Any
+
+class DpePath(IntEnum):
+    # Registers for P0 path in the DPE.
+    P0 = Sensor.EDpePath.P0
+    # Registers for P1 path in the DPE.
+    P1 = Sensor.EDpePath.P1
+    # Default registers for both in the DPE.
+    DEFAULT = Sensor.EDpePath.Default
+
+
+class GenerateCCD(IntEnum):
+    # If CCD version was changed then new files will be created
+    DEFAULT = DeviceParamsExt.DefaultCCD
+    # Generate CCD files even if CCD version was not changed
+    FORCE = DeviceParamsExt.ForceCCD
+    # Don't generate new CCD files
+    IGNORE = DeviceParamsExt.IgnoreCCD
 
 
 class ConnectionState(IntEnum):
@@ -54,16 +76,6 @@ class SensorState(IntEnum):
     SERVICE_NOT_CONNECTED = Sensor.ServiceNotConnected
 
 
-class SensorResolution(IntEnum):
-    """!  SensorResolution enum class.
-        All resolutions supported by Inuitive Sensor.
-    """
-    DEFAULT = ESensorResolution.Default  # Sensor   default    resolutions
-    BINNING = ESensorResolution.Binning  # Sensor's binning mode (reduced resolution provided by sensor)
-    VERTICAL_BINNING = ESensorResolution.VerticalBinning  # Vertical  binning   resolution
-    FULL = ESensorResolution.Full  # Full sensor resolution
-
-
 class InjectionType(IntEnum):
     """!
         The Injection Types
@@ -71,14 +83,6 @@ class InjectionType(IntEnum):
     NONE = EInjectionType.InjectionNone
     USER_DEFINE = EInjectionType.InjectionUserDefine
     IDVE = EInjectionType.Injection2IDVE
-
-
-class TemperatureType(IntEnum):
-    """!
-        The Sensor Temperature Types
-    """
-    SENSOR_1 = Sensor.TemperatureSensor1,
-    SENSOR_2 = Sensor.TemperatureSensor2
 
 
 class DeviceParams:
@@ -108,7 +112,7 @@ class DeviceParams:
     def sw_graph(self, value: str) -> None:
         """! sw_graph setter
         """
-        self.params.sw_graph = value
+        self.params.GraphXmlPath = value
 
     @property
     def hw_graph(self) -> str:
@@ -235,6 +239,19 @@ class DeviceParams:
         """
         self.params.BootPath = value
 
+    @property
+    def generate_ccd(self) -> GenerateCCD:
+        """! generate_ccd option getter
+            Generate CCD (Chip Calibration Data) mode.
+        """
+        return GenerateCCD(self.params.GenerateCCD)
+
+    @boot_path.setter
+    def generate_ccd(self, value: GenerateCCD) -> None:
+        """! CCD option setter
+        """
+        self.params.GenerateCCD = DeviceParamsExt.EGenerateCCD(value)
+
 
 class InuSensor:
     # @brief    InuStreamsPyth.Sensor.
@@ -245,22 +262,26 @@ class InuSensor:
     #
     _hw_information = HwInfo()
 
-    # @brief   IP address string.
+    # @brief    The Callback to one of Sensor.
     #
-    _ip_address = None
+    _callback = None
+
+    # @brief    The Superframe Callback of Sensor.
+    #
+    _superframe_callback = None
 
     def __init__(self, service_id: str = '', ip_address: str = ''):
-        self._sensor = Sensor(service_id)
-        self._ip_address = ip_address
+        self._sensor = Sensor(service_id, ip_address)
         """! The Sensor class initializer.
             @param serviceId  The Service Id string.
             @param ip_address  The IP Address string.
             @return  An instance of the Sensor initialized with the specified serviceId and ip_address.
         """
 
-    def create_stream(self, stream_type: StreamType, create_arg: Union[int, str] = BaseStream.DEFAULT_CHANNEL_ID) -> \
+    def create_stream(self, stream_type: StreamType, create_arg: Union[int, str] = None,
+                      arg_1: Union[bool, int] = None) -> \
             Union[DepthStream, StereoStream, ImageStream, ImuStream, FeaturesTrackingStream, HistogramStream,
-            SlamStream, CnnAppStream, CnnStream, PointCloudStream, InjectionStream, TemperatureStream]:
+            SlamStream, CnnAppStream, CnnStream, PointCloudStream, InjectionStream, TemperatureStream, ImageStreamRegistered]:
         # @brief    SetInjectResolution
         #
         # @Generate all kinds of InuDev streams
@@ -268,31 +289,30 @@ class InuSensor:
         # @param id             The streamer id - channel id or streamer name.
         # @return               An instance of different types of streams with the specified serviceId and ip_address
         if stream_type == StreamType.DEPTH:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return DepthStream(self._sensor.CreateDepthStream())
-            return DepthStream(self._sensor.CreateDepthStream(create_arg))
+            else:
+                return DepthStream(self._sensor.CreateDepthStream(create_arg))
         elif stream_type == StreamType.STEREO:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return StereoStream(self._sensor.CreateStereoStream())
             return StereoStream(self._sensor.CreateStereoStream(create_arg))
         elif stream_type == StreamType.GENERAL_CAMERA:
-            if type(id) == str:
-                return ImageStream(self._sensor.CreateImageStream(create_arg))
-            elif create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return ImageStream(self._sensor.CreateImageStream())
             return ImageStream(self._sensor.CreateImageStream(create_arg))
         elif stream_type == StreamType.IMU:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return ImuStream(self._sensor.CreateImuStream())
             return ImuStream(self._sensor.CreateImuStream(create_arg))
         elif stream_type == StreamType.FEATURES_TRACKING:
-            if type(create_arg) == str:
-                return FeaturesTrackingStream(self._sensor.CreateFeaturesTrackingStream(create_arg))
-            return FeaturesTrackingStream(self._sensor.CreateFeaturesTrackingStream())
+            if create_arg is None:
+                return FeaturesTrackingStream(self._sensor.CreateFeaturesTrackingStream())
+            return FeaturesTrackingStream(self._sensor.CreateFeaturesTrackingStream(create_arg))
         elif stream_type == StreamType.HISTOGRAM:
             return HistogramStream(self._sensor.CreateHistogramStream(create_arg))
         elif stream_type == StreamType.SLAM:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return SlamStream(self._sensor.CreateSlamStream())
             return SlamStream(self._sensor.CreateSlamStream(create_arg))
         elif stream_type == StreamType.TRACKING:
@@ -300,11 +320,11 @@ class InuSensor:
         elif stream_type is StreamType.USER_DEFINE:
             raise Exception("StreamType.USER_DEFINE doesn't supported yet.")
         elif stream_type == StreamType.CNN_APP:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return CnnAppStream(self._sensor.CreateCnnAppStream())
             return CnnAppStream(self._sensor.CreateCnnAppStream(create_arg))
         elif stream_type == StreamType.POINT_CLOUD:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return PointCloudStream(self._sensor.CreatePointCloudStream())
             return PointCloudStream(self._sensor.CreatePointCloudStream(create_arg))
         elif stream_type == StreamType.INJECTION:
@@ -314,20 +334,28 @@ class InuSensor:
                 return CnnStream(self._sensor.CreateCnnStream("Sout_cnn_0"))
             return CnnStream(self._sensor.CreateCnnStream(create_arg))
         elif stream_type == StreamType.TEMPERATURE:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 return TemperatureStream(self._sensor.CreateTemperaturesStream(SensorTemperatureType.ALL))
             return TemperatureStream(self._sensor.CreateTemperaturesStream(create_arg))
+        elif stream_type == StreamType.GENERAL_CAMERA_REGISTERED:
+            if create_arg is None:
+                return ImageStreamRegistered(self._sensor.CreateImageRegisteredStream())
+            elif arg_1 is None:
+                return ImageStreamRegistered(self._sensor.CreateImageRegisteredStream(create_arg))
+            else:
+                return ImageStreamRegistered(self._sensor.CreateImageRegisteredStream(create_arg, arg_1))
         return None
 
-    def create_started_stream(self, stream_type: StreamType, create_arg: Union[int, str] =
-    BaseStream.DEFAULT_CHANNEL_ID, callback_function=None,
+    def create_started_stream(self, stream_type: StreamType, create_arg: Union[int, str] = None, callback_function=None,
                               arg_1: Union[str, DepthOutputFormat, StereoOutputFormat,
                               ImageOutputFormat, FeaturesTrackingOutputFormat, SlamTransformationsParams,
-                              CnnAppOutputFormat, PointCloudRegistrationType, VoxelFilterParams] = None,
-                              arg_2: Union[str, DepthPostProcessing, ImagePostProcessing, int] = None) -> Union[
+                              CnnAppOutputFormat, VoxelFilterParams, SegmentationParams,
+                              SlamTransformationsParams] = None,
+                              arg_2: Union[str, DepthPostProcessing, ImagePostProcessing, int, bool] = None,
+                              arg_3: Union[DebugTraceMode, int, DepthPostProcessing] = None) -> Union[
         DepthStream, StereoStream,
         ImageStream, ImuStream, FeaturesTrackingStream, HistogramStream, SlamStream, CnnAppStream, CnnStream,
-        PointCloudStream, InjectionStream]:
+        PointCloudStream, InjectionStream, TemperatureStream, ImageStreamRegistered]:
         # @brief    SetInjectResolution
         #
         # @Generate all kinds of InuDev streams
@@ -336,7 +364,7 @@ class InuSensor:
         # @return               An instance of different types of streams with the specified serviceId and ip_address
         stream = None
         if stream_type == StreamType.DEPTH:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = DepthStream(self._sensor.CreateDepthStream())
             else:
                 stream = DepthStream(self._sensor.CreateDepthStream(create_arg))
@@ -348,7 +376,7 @@ class InuSensor:
                 stream.init(arg_1, arg_2)
             stream.start()
         elif stream_type == StreamType.STEREO:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = StereoStream(self._sensor.CreateStereoStream())
             else:
                 stream = StereoStream(self._sensor.CreateStereoStream(create_arg))
@@ -358,9 +386,7 @@ class InuSensor:
                 stream.init(arg_1)
             stream.start()
         elif stream_type == StreamType.GENERAL_CAMERA:
-            if type(id) == str:
-                stream = ImageStream(self._sensor.CreateImageStream(create_arg))
-            elif create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = ImageStream(self._sensor.CreateImageStream())
             else:
                 stream = ImageStream(self._sensor.CreateImageStream(create_arg))
@@ -372,17 +398,17 @@ class InuSensor:
                 stream.init(arg_1, arg_2)
             stream.start()
         elif stream_type == StreamType.IMU:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = ImuStream(self._sensor.CreateImuStream())
             else:
                 stream = ImuStream(self._sensor.CreateImuStream(create_arg))
             stream.init()
             stream.start()
         elif stream_type == StreamType.FEATURES_TRACKING:
-            if type(create_arg) == str:
-                stream = FeaturesTrackingStream(self._sensor.CreateFeaturesTrackingStream(create_arg))
-            else:
+            if create_arg is None:
                 stream = FeaturesTrackingStream(self._sensor.CreateFeaturesTrackingStream())
+            else:
+                stream = FeaturesTrackingStream(self._sensor.CreateFeaturesTrackingStream(create_arg))
             if arg_1 is None:
                 stream.init()
             else:
@@ -393,14 +419,17 @@ class InuSensor:
             stream.init()
             stream.start()
         elif stream_type == StreamType.SLAM:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = SlamStream(self._sensor.CreateSlamStream())
             else:
                 stream = SlamStream(self._sensor.CreateSlamStream(create_arg))
             if arg_1 is None:
-                stream.init()
-            else:
-                stream.init(arg_1)
+                arg_1 = SlamTransformationsParams()
+            if arg_2 is None:
+                arg_2 = False
+            if arg_3 is None:
+                arg_3 = DebugTraceMode.DEFAULT;
+            stream.init(arg_1, arg_2, arg_3)
             stream.start()
         elif stream_type == StreamType.TRACKING:
             if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
@@ -417,7 +446,7 @@ class InuSensor:
         elif stream_type == StreamType.USER_DEFINE:
             raise Exception("StreamType.USER_DEFINE doesn't supported yet.")
         elif stream_type == StreamType.CNN_APP:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = CnnAppStream(self._sensor.CreateCnnAppStream())
             else:
                 stream = CnnAppStream(self._sensor.CreateCnnAppStream(create_arg))
@@ -427,7 +456,7 @@ class InuSensor:
                 stream.init(arg_1)
             stream.start()
         elif stream_type == StreamType.POINT_CLOUD:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = PointCloudStream(self._sensor.CreatePointCloudStream())
             else:
                 stream = PointCloudStream(self._sensor.CreatePointCloudStream(create_arg))
@@ -452,18 +481,32 @@ class InuSensor:
             if arg_1 is not None and arg_2 is not None:
                 stream.start_network(arg_1, arg_2)
         elif stream_type == StreamType.TEMPERATURE:
-            if create_arg == BaseStream.DEFAULT_CHANNEL_ID:
+            if create_arg is None:
                 stream = TemperatureStream(self._sensor.CreateTemperaturesStream(SensorTemperatureType.ALL))
             else:
                 stream = TemperatureStream(self._sensor.CreateTemperaturesStream(create_arg))
             stream.init()
             stream.start()
+        elif stream_type == StreamType.GENERAL_CAMERA_REGISTERED:
+            if create_arg is None:
+                stream = ImageStreamRegistered(self._sensor.CreateImageRegisteredStream())
+            else:
+                s = self._sensor.CreateImageRegisteredStream(create_arg, BaseStream.DEFAULT_CHANNEL_ID)
+                stream = ImageStreamRegistered(s)
+            if arg_1 is None:
+                stream.init()
+            else:
+                stream.init(arg_1, arg_2, arg_3)
+            #            else:
+            #                stream.init(ImageS.EOutputFormat(arg_1), ImageS.EPostProcessing(arg_2), DepthS.EPostProcessing(arg_3))
+            stream.start()
         if stream is not None:
             if callback_function is not None:
                 stream.register = callback_function
+            return stream
         return stream
 
-    def init(self, device_params: DeviceParams = None, cnn_load_params: CnnParams = None) -> HwInfo:
+    def init(self, device_params: DeviceParams = None, cnn_params: CnnParams = None) -> Tuple[HwInfo, VectorDpeParams]:
         # @brief    Service initialization.
         #
         # Invoked once before initialization of any other InuDev stream. After invoking Init method the Device is
@@ -471,21 +514,18 @@ class InuSensor:
         #   client application can receive streams of frames.
         # @param    deviceParams    Initialized the Device with these input parameters. It will be set to all assembled
         #   cameras.
-        # @param    cnn_load_params   CNN network. The service will load the specified CNN network in parallel while
-        #   InuSensor is initialized & started to reduce CNN loading time.
-        # @return HwInfo
+        # @return HwInfo and VectorDpeParams
         # class and will receive the Device HW configuration.
-        if device_params is None and cnn_load_params is None:
+        dpe = VectorDpeParams()
+        if device_params is None:
             self._sensor.Init(self._hw_information.info)
-        elif device_params is not None and cnn_load_params is None:
-            self._sensor.Init(self._hw_information.info, device_params.params)
-        elif device_params is None and cnn_load_params is not None:
-            self._sensor.Init(self._hw_information.info, cnn_load_params.params)
+        elif cnn_params is None:
+            self._sensor.Init(self._hw_information.info, device_params.params, dpe)
         else:
-            self._sensor.Init(self._hw_information.info, device_params.params, cnn_load_params.params)
-        return self._hw_information
+            self._sensor.Init(self._hw_information.info, device_params.params, cnn_params.params)
+        return self._hw_information, dpe
 
-    def start(self, hw_information: HwInfo = None):# -> tuple[MapUintPoint, HwInfo]:
+    def start(self, channel_control_params: Dict[ChannelControlParams, Any] = None, dpe: VectorDpeParams = None)-> MapUintPoint:
         # @brief    Start acquisition of frames.
         #
         # Shall be invoked only after the service is successfully initialized and before any request
@@ -493,10 +533,21 @@ class InuSensor:
         # @return MapUintPoint      Image size that is provided by the Device [Width,Height] according to channelID.
         # @return HwInfo		Return real params with which the server works.
         channels_size = MapUintPoint()
-        if hw_information is None:
-            hw_information = self._hw_information
-        self._sensor.Start(channels_size, self._hw_information.info)
-        return channels_size, self._hw_information
+        map_channel_control_params = MapUintChannelControl()
+        if channel_control_params is None and dpe is None:
+            self._sensor.Start()
+        elif channel_control_params is not None:
+            for key, value in channel_control_params.items():
+                map_channel_control_params[key] = value.params
+            if dpe is not None:
+                self._sensor.Start(channels_size, map_channel_control_params, dpe)
+            else:
+                self._sensor.Start(channels_size, map_channel_control_params)
+        else:
+            for key, control in self._hw_information.info.Channels.items():
+                map_channel_control_params[key] = control.ControlParams
+            self._sensor.Start(channels_size, map_channel_control_params, dpe)
+        return channels_size
 
     def terminate(self) -> None:
         # @brief    Service Termination.
@@ -539,19 +590,8 @@ class InuSensor:
         # @return SensorState
         return SensorState(self._sensor.State)
 
-    def get_sensor_temperature(self, temp_type: TemperatureType) -> float:
-        # @brief    Get the Sensor Temperature.
-        #
-        # @param    type  Temperature sensor type.
-        # @return   Temperature    returns the temperature in Celsius .
-        return self._sensor.GetSensorTemperature(Sensor.ETemperatureType(temp_type))
-
     # @register.setter
     def register(self, callback) -> None:
-        # @brief    The Callback to one of Sensor.
-        #
-        _callback = None
-
         # @brief    Registration for receiving InuSensor state notifications (push).
         #
         # The provided callback function is called only when the Device state is changed.
@@ -561,10 +601,10 @@ class InuSensor:
             #
             # This function is invoked any time a frame is ready, or if an error occurs. The parameters of this function
             # are: Caller stream object, received depth frame and result code.
-            _callback(InuSensor(sensor), ConnectionState(connection_state), Error(error))
+            self._callback(InuSensor(sensor), ConnectionState(connection_state), Error(error))
 
         self._sensor.Register(_callback_cast)
-        _callback = callback
+        self._callback = callback
 
     register = property(None, register)
 
@@ -603,7 +643,7 @@ class InuSensor:
         # Sets Device control params for specific sensor.
         # @param    sensorId        The sensor id.
         # @param    params          New Sensor Control parameters.
-        self._sensor.SetSensorControlParams(sensor_id, params)
+        self._sensor.SetSensorControlParams(params, sensor_id)
 
     def get_auto_exposure_params(self, sensor_id: int,
                                  projector_type: ProjectorType = ProjectorType.PATTERNS) -> AutoExposureParams:
@@ -715,7 +755,8 @@ class InuSensor:
         # @brief    SetChannelDimensions
         #
         # Enables to change channel dimensions (not all channels supports this operation).
-        # Should be called only after the sensor had started.
+        # Should be called only between Init() and Start() sensor.
+        # Dimensions width and height must be *16
         # @param    channelID           The id of the output channel on which the scaling operation will affect.
         # @param    channelDimensions   The dimension of the actual data inside the output image after scaling.
         self._sensor.SetChannelDimensions(channel_id, channel_dimensions.params)
@@ -781,15 +822,49 @@ class InuSensor:
         # @return InuError    Error code, EErrorCode.OK if operation successfully completed.
         self._sensor.SetInjectResolution(streamer_name, channel_size.point)
 
+    def update_dpe_params(self, function_name: str, inst_id: DpePath, params: MapStringString) -> None:
+        # @brief    SetInjectResolution
+        #
+        # @Should be called only after the sensor had initialized and before it was started.
+        # @param streamerName The Streamer Name on which the write operation will affect.
+        # @param channelSize The size of the actual data inside the input image after writing.
+        # @return InuError    Error code, EErrorCode.OK if operation successfully completed.
+        self._sensor.UpdateDpeParams(function_name, Sensor.EDpePath(inst_id), params)
+
+    # @superframe_register.setter
+    def superframe_register(self, superframe_callback, streams: Set[BaseS], strategy: SuperFramesSyncStrategy) -> None:
+        # @brief    Registration for receiving SuperFrame (push).
+        #
+        # The provided callback function is called only when the SuperFrame is ready.
+        # @param callback function which is invoked when the SuperFrame is ready.
+        def _superframe_callback_cast(frame: SuperF, error: InuError) -> None:
+            # @brief    Prototype of callback function which is used by the Register method.
+            #
+            # This function is invoked any time a frame is ready, or if an error occurs. The parameters of this function
+            # are: Caller stream object, received depth frame and result code.
+            self._superframe_callback(SuperFrame(frame), Error(error))
+
+        list_streams = VectorBStreams()
+        for st in streams:
+            list_streams.Add(st.stream)
+        self._superframe_callback = superframe_callback
+        self._sensor.RegisterSuperFrame(_superframe_callback_cast, list_streams, strategy.strategy)
+
 
 def create_sensor(service_id: str = '', ip_address: str = '') -> InuSensor:
     return InuSensor(service_id)
 
 
-def create_started_sensor(callback=None, device_params: DeviceParams = None, cnn_load_params: CnnParams = None,
-                          service_id: str = '', ip_address: str = ''): # -> tuple[InuSensor, MapUintPoint, HwInfo]:
-    sensor = InuSensor(service_id)
-    sensor.init(device_params, cnn_load_params)
-    channels_size, hw_information = sensor.start()
+def create_started_sensor(callback=None, device_params: DeviceParams = None,
+                          param1: Union[str, CnnParams] = None, ip_address: str = ''):  # -> tuple[InuSensor,
+    # MapUintPoint, HwInfo]:
+    dpe = None
+    if type(param1) is str:
+        sensor = InuSensor(param1)
+        hw_information, dpe = sensor.init(device_params)
+    else:
+        sensor = InuSensor()
+        hw_information = sensor.init(device_params, param1)
+    channels_size = sensor.start(None, dpe)
     sensor.register = callback
     return sensor, channels_size, hw_information

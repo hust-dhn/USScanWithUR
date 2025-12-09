@@ -29,13 +29,11 @@ class ImagePostProcessing(IntEnum):
     """
     # No algorithm is running
     NONE_PROCESSING = 0
-    # Projection of image on depth, format is similar to eDefault
-    REGISTERED = ImageS.EPostProcessing.Registered
     # GammaCorrected image, format is similar to eDefault
     GAMMA_CORRECT = ImageS.EPostProcessing.GammaCorrect
 
 
-class ImageStream(BaseStream, DepthProperties, CroppingROI):
+class ImageStream(BaseStream, CroppingROI):
     """! Interface for Image service.
 
     Role: Controls depth images streaming service and provides image frames.
@@ -48,46 +46,45 @@ class ImageStream(BaseStream, DepthProperties, CroppingROI):
 
     # @brief    InuStreamsPyth.ImageS.
     #
-    _stream: ImageS = None
+    stream: ImageS = None
 
     def __init__(self, stream: ImageS):
         BaseStream.__init__(self, stream)
-        DepthProperties.__init__(self, stream)
         CroppingROI.__init__(self, stream)
-        self._stream = stream
+        self.stream = stream
         """! The Depth stream class initializer.
             @param stream  The InuStreamsPyth.ImageS.
             @return  An instance of the Image stream initialized with the specified InuStreamsPyth.ImageS object.
         """
 
     def init(self, form: ImageOutputFormat = ImageOutputFormat.DEFAULT,
-             processing: ImagePostProcessing = ImagePostProcessing.NONE_PROCESSING,
-             reg_channel_id: int = BaseStream.DEFAULT_CHANNEL_ID) -> None:
+             processing: ImagePostProcessing = ImagePostProcessing.NONE_PROCESSING) -> None:
         # @brief    Service initialization.
         #
         # Hall be invoked once before starting frames acquisition.
         # @param  format            The Output format that should be invoked.
         # @param  processing        The PostProcessing algorithms that should be invoked.
         # @param  regChannelID      The Register Channel ID - in the case of  RegisteredImage only
-        self._stream.Init(ImageS.EOutputFormat(form), ImageS.EPostProcessing(processing), reg_channel_id)
-
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
+        self.stream.Init(ImageS.EOutputFormat(form), ImageS.EPostProcessing(processing))
 
     def register(self, callback) -> None:
         """!
-            Registration/De registration for receiving stream frames (push)
+             Registration/De registration for receiving stream frames (push)
 
-            The provided callback function is called when a new frame is ready (non-blocking).
-            It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
-            @param  callback  The Callback function which is invoked when a new frame is ready. Send nullptr to
-                unregister for receiving frames.
-        """
+             All streams should use the same callback function when calling for “register”.
+             You can find an example for a callback function here: “multithread_callback_example.py” where
+              “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+              on the stream type.
+
+             The provided callback function is called when a new frame is ready (non-blocking).
+             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
+             If you need more than 1 stream you have to give in number of streams only 1 Callback function and after
+             checking Stream type inside perform needed process.
+             The parameters of this function are:
+             @param  callback  The Callback function which is invoked when a new frame is ready.
+              Send None to unregister for receiving frames.
+         """
+
         def _callback_cast(stream: ImageS, frame: ImageF, error: InuError) -> None:
             """!
                 Prototype of callback function which is used by the Register method.
@@ -100,7 +97,10 @@ class ImageStream(BaseStream, DepthProperties, CroppingROI):
             """
             BaseStream.callback(ImageStream(stream), ImageFrame(frame), Error(error))
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
+        if callback is None:
+            self.stream.Register(None)
+        else:
+            self.stream.Register(_callback_cast)
     register = property(None, register)
 
     @property
@@ -110,4 +110,4 @@ class ImageStream(BaseStream, DepthProperties, CroppingROI):
         # This method returns when a new frame is ready (blocking) or if an input timeout has elapsed.
         # It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
         # @return  The returned depth frame (Z-buffer).
-        return ImageFrame(self._stream.GetFrame())
+        return ImageFrame(self.stream.GetFrame())

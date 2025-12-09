@@ -1,5 +1,8 @@
 
 *.zip
 *.mp4
+*.deb
+*.tar.xz
 
 SDK_CAMERA/*
+camera/linux_x86/*

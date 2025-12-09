@@ -48,7 +48,10 @@ class StereoFrame(BaseFrame):
         #
         # @Detailed description:        Get left frame Image
         # @return                       The left frame Image
-        return ImageFrame(self.stereo_frame.LeftFrame)
+        try:
+            return ImageFrame(self.stereo_frame.LeftFrame)
+        except Exception as e:
+            return None
 
     @property
     def right_frame(self) -> ImageFrame:
@@ -56,7 +59,10 @@ class StereoFrame(BaseFrame):
         #
         # @Detailed description:        Get right frame Image
         # @return                       The right frame Image
-        return ImageFrame(self.stereo_frame.RightFrame)
+        try:
+            return ImageFrame(self.stereo_frame.RightFrame)
+        except Exception as e:
+            return None
 
 
 class StereoStream(BaseStream, CroppingROI):
@@ -70,7 +76,7 @@ class StereoStream(BaseStream, CroppingROI):
           3. Knows how to provide a continuous stream of stereo frames (push)
     """
 
-    _stream = None
+    stream = None
 
     def __init__(self, stream: StereoS):
         """! The Stereo stream class initializer.
@@ -79,32 +85,33 @@ class StereoStream(BaseStream, CroppingROI):
         """
         BaseStream.__init__(self, stream)
         CroppingROI.__init__(self, stream)
-        self._stream = stream
+        self.stream = stream
 
     def init(self, form: StereoOutputFormat = StereoOutputFormat.DEFAULT) -> None:
         # @brief    Service initialization.
         #
         # Hall be invoked once before starting frames acquisition.
         # @param  format            The Output format that should be invoked.
-        self._stream.Init(StereoS.EOutputFormat(form))
-
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
+        self.stream.Init(StereoS.EOutputFormat(form))
 
     def register(self, callback) -> None:
         """!
-            Registration/De registration for receiving stream frames (push)
+             Registration/De registration for receiving stream frames (push)
 
-            The provided callback function is called when a new frame is ready (non-blocking).
-            It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
-            @param  callback  The Callback function which is invoked when a new frame is ready. Send nullptr to
-                unregister for receiving frames.
-        """
+             All streams should use the same callback function when calling for “register”.
+             You can find an example for a callback function here: “multithread_callback_example.py” where
+              “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+              on the stream type.
+
+             The provided callback function is called when a new frame is ready (non-blocking).
+             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
+             If you need more than 1 stream you have to give in number of streams only 1 Callback function and after
+             checking Stream type inside perform needed process.
+             The parameters of this function are:
+             @param  callback  The Callback function which is invoked when a new frame is ready.
+              Send None to unregister for receiving frames.
+         """
+
         def _callback_cast(stream: StereoS, frame: StereoF, error: InuError) -> None:
             """!
                 Prototype of callback function which is used by the Register method.
@@ -117,7 +124,10 @@ class StereoStream(BaseStream, CroppingROI):
             """
             BaseStream.callback(StereoStream(stream), StereoFrame(frame), Error(error))
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
+        if callback is None:
+            self.stream.Register(None)
+        else:
+            self.stream.Register(_callback_cast)
     register = property(None, register)
 
     @property
@@ -127,5 +137,5 @@ class StereoStream(BaseStream, CroppingROI):
         # This method returns when a new frame is ready (blocking) or if an input timeout has elapsed.
         # It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
         # @return  The returned stereo frame.
-        fr = self._stream.GetFrame()
+        fr = self.stream.GetFrame()
         return StereoFrame(fr)

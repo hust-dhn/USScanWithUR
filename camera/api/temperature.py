@@ -10,8 +10,8 @@ class SensorTemperatureType(IntEnum):
         Represents the various temperature sensors.
         The values will be used with bitwise operands in CTemperaturesStream::Init function
     """
-    SENSOR_1 = TemperatureF.ESensorTemperatureType.Sensor1
-    SENSOR_2 = TemperatureF.ESensorTemperatureType.Sensor2
+    SENSOR_LEFT = TemperatureF.ESensorTemperatureType.SensorLeft
+    SENSOR_RIGHT = TemperatureF.ESensorTemperatureType.SensorRight
     PVT = TemperatureF.ESensorTemperatureType.PVT
     ALL = TemperatureF.ESensorTemperatureType.All
 
@@ -34,18 +34,18 @@ class TemperatureFrame(BaseFrame):
         """
 
     @property
-    def sensor_1(self) -> float:
+    def sensor_left(self) -> float:
         # @brief     Retrieve temperature value from specified temperature sensor.
         #
         # @return temperature value.
-        return self.temperature_frame.Temperature(TemperatureF.ESensorTemperatureType(SensorTemperatureType.SENSOR_1))
+        return self.temperature_frame.Temperature(TemperatureF.ESensorTemperatureType(SensorTemperatureType.SENSOR_LEFT))
 
     @property
-    def sensor_2(self) -> float:
+    def sensor_right(self) -> float:
         # @brief     Retrieve temperature value from specified temperature sensor.
         #
         # @return temperature value.
-        return self.temperature_frame.Temperature(TemperatureF.ESensorTemperatureType(SensorTemperatureType.SENSOR_2))
+        return self.temperature_frame.Temperature(TemperatureF.ESensorTemperatureType(SensorTemperatureType.SENSOR_RIGHT))
 
     @property
     def pvt(self) -> float:
@@ -80,29 +80,24 @@ class TemperatureStream(BaseStream):
         BaseStream.__init__(self, stream)
         self._stream = stream
 
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
-
-    def init(self) -> None:
-        # @brief    Service initialization.
-        #
-        # Hall be invoked once before starting frames acquisition.
-        self._stream.Init()
-
     def register(self, callback) -> None:
         """!
-            Registration/De registration for receiving stream frames (push)
+             Registration/De registration for receiving stream frames (push)
 
-            The provided callback function is called when a new frame is ready (non-blocking).
-            It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
-            @param  callback  The Callback function which is invoked when a new frame is ready. Send nullptr to
-                unregister for receiving frames.
-        """
+             All streams should use the same callback function when calling for “register”.
+             You can find an example for a callback function here: “multithread_callback_example.py” where
+              “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+              on the stream type.
+
+             The provided callback function is called when a new frame is ready (non-blocking).
+             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
+             If you need more than 1 stream you have to give in number of streams only 1 Callback function and after
+             checking Stream type inside perform needed process.
+             The parameters of this function are:
+             @param  callback  The Callback function which is invoked when a new frame is ready.
+              Send None to unregister for receiving frames.
+         """
+
         def _callback_cast(stream: TemperatureS, frame: TemperatureF, error: InuError) -> None:
             """!
                 Prototype of callback function which is used by the Register method.
@@ -116,7 +111,10 @@ class TemperatureStream(BaseStream):
             print("Temperature _callback_cast")
             BaseStream.callback(TemperatureStream(stream), TemperatureFrame(frame), Error(error))
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
+        if callback is None:
+            self._stream.Register(None)
+        else:
+            self._stream.Register(_callback_cast)
     register = property(None, register)
 
     @property

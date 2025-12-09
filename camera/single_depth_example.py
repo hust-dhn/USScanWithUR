@@ -19,7 +19,7 @@ if __name__ == "__main__":
     def _print_frame(frame: ImageFrame) -> None:
         global frame_counter  # Use the global counter to save each frame with a unique name
         if frame is None:
-            print('Invalid Depth frame')
+            print('Invalid RGB frame')
         else:
             print(f"\t------------------------------------- Depth {frame.frame_index} ---------------------------------")
             print(f"{type(frame)} : Format {frame.format}, Height {frame.height}, Width{frame.width}, "

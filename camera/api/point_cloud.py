@@ -1,7 +1,9 @@
 from .base_stream import BaseStream
 from .base_frame import BaseFrame
 from .errors import Error
-from .InuStreamsPyth import PointCloudF, PointCloudS, InuError, VoxelFilterP
+from .InuStreamsPyth import PointCloudF, PointCloudS, InuError, VoxelFilterP, SegmentationP, DepthS
+from .depth_properties import DepthProperties
+from .depth_stream import DepthPostProcessing
 import numpy as np
 from typing import Union
 from enum import IntEnum
@@ -80,16 +82,6 @@ class PointCloudFrame(BaseFrame):
             return None
 
 
-class PointCloudRegistrationType(IntEnum):
-    """!  PointCloudRegistrationType enum class.
-        Represents all possible PointCloud registration types.
-    """
-    # No registration
-    NONE_REGISTRATION = PointCloudS.EPointCloudRegistration.NoneRegistration
-    # Register PointCloud to specific channel
-    REGISTRATION = PointCloudS.EPointCloudRegistration.Registration
-
-
 class VoxelFilterParams:
     """! VoxelFilterParams class.
         Role: Controls Voxel filter params .
@@ -148,7 +140,86 @@ class VoxelFilterParams:
         self.params.VoxelLeafSizeZ = value
 
 
-class PointCloudStream(BaseStream):
+class SegmentationParams(VoxelFilterParams):
+    """! SegmentationParams class.
+        Role: Controls Segmentation filter params .
+    """
+    # @brief    InuStreamsPyth.VoxelFilterP
+    #
+    params = None
+
+    def __init__(self, params: SegmentationP = None):
+        """! The Segmentation params class initializer.
+            @return  An instance of the SegmentationParams object.
+        """
+        VoxelFilterParams .__init__(self, params)
+        if params is None:
+            self.params = SegmentationP()
+        else:
+            self.params = params
+
+    @property
+    def calibration_frame_interval(self) -> int:
+        # @brief    calibration_frame_interval getter.
+        return self.params.CalibrationFrameInterval
+
+    @calibration_frame_interval.setter
+    def calibration_frame_interval(self, value: int) -> None:
+        # @brief    calibration_frame_interval setter.
+        self.params.CalibrationFrameInterval = value
+
+    @property
+    def ground_threshold(self) -> int:
+        # @brief    ground_threshold getter.
+        return self.params.GroundThreshold
+
+    @ground_threshold.setter
+    def ground_threshold(self, value: int) -> None:
+        # @brief    ground_threshold setter.
+        self.params.GroundThreshold = value
+
+    @property
+    def add_floor_flag(self) -> bool:
+        # @brief    add_floor_flag getter.
+        return self.params.AddFloorFlag
+
+    @add_floor_flag.setter
+    def add_floor_flag(self, value: bool) -> None:
+        # @brief    add_floor_flag setter.
+        self.params.AddFloorFlag = value
+
+    @property
+    def clustering_min_neighbors(self) -> int:
+        # @brief    clustering_min_neighbors getter.
+        return self.params.ClusteringMinNeighbors
+
+    @clustering_min_neighbors.setter
+    def clustering_min_neighbors(self, value: int) -> None:
+        # @brief    clustering_min_neighbors setter.
+        self.params.ClusteringMinNeighbors = value
+
+    @property
+    def clustering_epsilon(self) -> float:
+        # @brief    clustering_epsilon getter.
+        return self.params.ClusteringEpsilon
+
+    @clustering_epsilon.setter
+    def clustering_epsilon(self, value: int) -> None:
+        # @brief    clustering_epsilon setter.
+        self.params.ClusteringEpsilon = value
+
+    @property
+    def cluster_min_points(self) -> float:
+        # @brief    cluster_min_points getter.
+        return self.params.ClusterMinPoints
+
+    @cluster_min_points.setter
+    def cluster_min_points(self, value: int) -> None:
+        # @brief    cluster_min_points setter.
+        self.params.ClusterMinPoints = value
+
+
+class PointCloudStream(BaseStream, DepthProperties):
     """! Interface for PointCloud service.
 
     Role: Controls PointCloud streaming service and provides general or PointCloud frames.
@@ -172,41 +243,48 @@ class PointCloudStream(BaseStream):
             InuStreamsPyth.PointCloudS object.
         """
         BaseStream.__init__(self, stream)
+        DepthProperties.__init__(self, stream)
         self._stream = stream
 
-    def init(self,
-             arg1: Union[PointCloudRegistrationType, VoxelFilterParams] = None,
-             reg_channel_id: int = BaseStream.DEFAULT_CHANNEL_ID) -> None:
+    def init(self, arg1: Union[int, VoxelFilterParams, SegmentationParams, DepthPostProcessing] = None,
+             arg2: DepthPostProcessing = None) -> None:
         # @brief    Service initialization.
         #
         # @param  arg1              Registration type With/without registration or VoxelFilterParams.
         # @param  regChannelID      The Register Channel ID - in the case of  RegisteredImage only
         # Hall be invoked once before starting frames acquisition.
-        if type(arg1) == PointCloudRegistrationType:
-            self._stream.Init(arg1, reg_channel_id)
-        elif type(arg1) == VoxelFilterParams:
-            self._stream.Init(arg1.params)
+        if arg1 is None:
+            self._stream.Init()
+        elif arg2 is None:
+            if type(arg1) is SegmentationParams or type(arg1) is VoxelFilterParams:
+                if arg2 is None:
+                    self._stream.Init(arg1.params, DepthS.EPostProcessing(DepthPostProcessing.DEFAULT))
+                else:
+                    self._stream.Init(arg1.params, DepthS.EPostProcessing(arg2))
+            elif type(arg1) is DepthPostProcessing:
+                self._stream.Init(DepthS.EPostProcessing(arg1))
+            else:
+                self._stream.Init(arg1)
         else:
-            self._stream.Init(PointCloudS.EPointCloudRegistration.NoneRegistration,
-                              BaseStream.DEFAULT_CHANNEL_ID)
-
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
+            self._stream.Init(arg1, DepthS.EPostProcessing(arg2))
 
     def register(self, callback) -> None:
         """!
-            Registration/De registration for receiving stream frames (push)
+             Registration/De registration for receiving stream frames (push)
 
-            The provided callback function is called when a new frame is ready (non-blocking).
-            It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
-            @param  callback  The Callback function which is invoked when a new frame is ready. Send nullptr to
-                unregister for receiving frames.
-        """
+             All streams should use the same callback function when calling for “register”.
+             You can find an example for a callback function here: “multithread_callback_example.py” where
+              “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+              on the stream type.
+
+             The provided callback function is called when a new frame is ready (non-blocking).
+             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
+             If you need more than 1 stream you have to give in number of streams only 1 Callback function and after
+             checking Stream type inside perform needed process.
+             The parameters of this function are:
+             @param  callback  The Callback function which is invoked when a new frame is ready.
+              Send None to unregister for receiving frames.
+         """
 
         def _callback_cast(stream: PointCloudS, frame: PointCloudF, error: InuError) -> None:
             """!
@@ -219,10 +297,11 @@ class PointCloudStream(BaseStream):
                 @param error  Result code.
             """
             BaseStream.callback(PointCloudStream(stream), PointCloudFrame(frame), Error(error))
-
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
-
+        if callback is None:
+            self._stream.Register(None)
+        else:
+            self._stream.Register(_callback_cast)
     register = property(None, register)
 
     @property
@@ -233,3 +312,8 @@ class PointCloudStream(BaseStream):
         # It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
         # @return  The returned stereo frame.
         return PointCloudFrame(self._stream.GetFrame())
+
+    @property
+    def color_channel_id(self) -> int:
+        # @brief    cluster_min_points getter.
+        return self.params.ColorChannelID

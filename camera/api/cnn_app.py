@@ -243,17 +243,14 @@ class CnnAppStream(BaseStream):
         # Hall be invoked once before starting frames acquisition.
         self._stream.Init(CnnAppF.EOutputType(form))
 
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
-
     def register(self, callback) -> None:
         """!
             Registration/De registration for receiving stream frames (push)
+
+            All streams should use the same callback function when calling for “register”.
+            You can find an example for a callback function here: “multithread_callback_example.py” where
+             “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+             on the stream type.
 
             The provided callback function is called when a new frame is ready (non-blocking).
             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
@@ -272,7 +269,10 @@ class CnnAppStream(BaseStream):
             """
             BaseStream.callback(CnnAppStream(stream), CnnAppFrame(frame), Error(error))
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
+        if callback is None:
+            self._stream.Register(None)
+        else:
+            self._stream.Register(_callback_cast)
     register = property(None, register)
 
     @property

@@ -1,7 +1,140 @@
-from .shared import ChannelType
+from .shared import ChannelType, ImageFormat
 from .InuStreamsPyth import HwInformation, MapUintHwChannel, MapUintSensorParams, MapStringInjectorParams, \
-    InjectorP, VectorUint, EChannelType, EInterleaveMode, ESensorModel, ESensorRole, VectorUint, SensorP
+    InjectorP, VectorUint, EChannelType, EInterleaveMode, ESensorModel, ESensorRole, VectorUint, SensorP, \
+    ESensorResolution, ChannelControlP, EImageFormat, VectorImageFormat
 from enum import IntEnum
+
+
+class SensorResolution(IntEnum):
+    """!  SensorResolution enum class.
+        All resolutions supported by Inuitive Sensor.
+    """
+    DEFAULT = ESensorResolution.Default  # Sensor   default    resolutions
+    BINNING = ESensorResolution.Binning  # Sensor's binning mode (reduced resolution provided by sensor)
+    VERTICAL_BINNING = ESensorResolution.VerticalBinning  # Vertical  binning   resolution
+    FULL = ESensorResolution.Full  # Full sensor resolution
+
+
+class InterleaveMode(IntEnum):
+    """! InterleaveMode enum class.
+    """
+    # This value will be returned in InuSensor::Init CHwInfo for each channel which doesn't support interleave.
+    NOT_SUPPORTED = EInterleaveMode.NotSupported
+    # Get data only from right sensor.
+    RIGHT_SENSOR = EInterleaveMode.RightSensor
+    # Get data only from right sensor.
+    LEFT_SENSOR = EInterleaveMode.LeftSensor
+    # Get data from both sensors
+    INTERLEAVE = EInterleaveMode.Interleave
+    # when this value is provided the configuration will be taken from InuModelDB.csv.
+    DEFAULT = EInterleaveMode.Default
+
+
+class ChannelControlParams:
+    """!  ChannelControlParams's info
+    """
+
+    params: ChannelControlP = None
+    """!  ChannelControlP.InjectorP.
+    """
+
+    def __init__(self, params: ChannelControlP):
+        """!
+             The ChannelControlParams class initializer.
+             return  An instance of the ChannelControlParams object.
+        """
+        self.params = params
+
+    @property
+    def sensor_res(self) -> SensorResolution:
+        # @brief SensorResolution.
+        #
+        # @return SensorResolution.
+        return SensorResolution(self.params.SensorRes)
+
+    @sensor_res.setter
+    def sensor_res(self, value: SensorResolution) -> None:
+        # @brief    sensor_id setter.
+        self.params.SensorRes = ESensorResolution.ESensorResolution(value)
+
+    @property
+    def fps(self) -> int:
+        # @brief fps.
+        #
+        # @return fps.
+        return self.params.FPS
+
+    @fps.setter
+    def fps(self, value: int) -> None:
+        # @brief    fps setter.
+        self.params.FPS = value
+
+    @property
+    def chunk_size(self) -> int:
+        # @brief chunk_size.
+        #
+        # @return chunk_size.
+        return self.params.ChunkSize
+
+    @chunk_size.setter
+    def chunk_size(self, value: int) -> None:
+        # @brief    chunk_size setter.
+        self.params.ChunkSize = value
+
+    @property
+    def interleave_mode(self) -> InterleaveMode:
+        # @brief interleave_mode.
+        #
+        # @return interleave_mode.
+        return InterleaveMode(self.params.InterleaveMode)
+
+    @interleave_mode.setter
+    def interleave_mode(self, value: InterleaveMode) -> None:
+        # @brief    interleave_mode setter.
+        self.params.InterleaveMode = EInterleaveMode.EInterleaveMode(value)
+
+    @property
+    def selected_image_format(self) -> ImageFormat:
+        # @brief selected_image_format.
+        #
+        # @return selected_image_format.
+        return ImageFormat(self.params.SelectedImageFormat)
+
+    @selected_image_format.setter
+    def selected_image_format(self, value: ImageFormat) -> None:
+        # @brief    interleave_mode setter.
+        self.params.SelectedImageFormat = EImageFormat(value)
+
+    @property
+    def activate_registered_depth(self) -> bool:
+        # @brief activate_registered_depth.
+        #
+        # @return true / false.
+        return self.params.ActivateRegisteredDepth
+
+    @activate_registered_depth.setter
+    def activate_registered_depth(self, value: bool) -> None:
+        # @brief    activate_registered_depth setter.
+        self.params.ActivateRegisteredDepth = value
+
+    @property
+    def registered_depth_channel_id(self) -> int:
+        # @brief registered_depth_channel_id.
+        #
+        # @return channel id.
+        return self.params.RegisteredDepthChannelID
+
+    @registered_depth_channel_id.setter
+    def registered_depth_channel_id(self, value: int) -> None:
+        # @brief    registered_depth_channel_id setter.
+        self.params.RegisteredDepthChannelID = value
+
+    @property
+    def available_image_formats(self) -> VectorImageFormat:
+        # @brief available_image_formats.
+        #
+        # @return available_image_formats.
+        return self.params.AvailableImageFormats
 
 
 class InjectorParams:
@@ -155,21 +288,6 @@ class SensorParams:
     def connected_channels(self, value: VectorUint) -> None:
         # @brief    Connected Channels setter.
         self.params.ConnectedChannels = value
-
-
-class InterleaveMode(IntEnum):
-    """! InterleaveMode enum class.
-    """
-    # This value will be returned in InuSensor::Init CHwInfo for each channel which doesn't support interleave.
-    NOT_SUPPORTED = EInterleaveMode.NotSupported
-    # Get data only from right sensor.
-    RIGHT_SENSOR = EInterleaveMode.RightSensor
-    # Get data only from right sensor.
-    LEFT_SENSOR = EInterleaveMode.LeftSensor
-    # Get data from both sensors
-    INTERLEAVE = EInterleaveMode.Interleave
-    # when this value is provided the configuration will be taken from InuModelDB.csv.
-    DEFAULT = EInterleaveMode.Default
 
 
 class HwInfo:

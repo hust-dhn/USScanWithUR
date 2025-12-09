@@ -3,8 +3,9 @@ from .base_stream import StreamState
 from .shared import StreamType
 from .image_frame import ImageFrame
 from .stereo import StereoFrame
+from .slam import SlamFrame
 from .features_tracking import FeaturesTrackingFrame
-from .InuStreamsPyth import InjectionS, Sensor, ImageF, StereoF, FeaturesTrackingF
+from .InuStreamsPyth import InjectionS, Sensor, ImageF, StereoF, FeaturesTrackingF, SlamF
 from typing import Union
 import numpy as np
 
@@ -67,8 +68,8 @@ class InjectionStream:
         #
         return StreamState(self._stream.State())
 
-    def inject_file_to_stream(self, stream_type: StreamType, frame_path: str) -> Union[
-        ImageFrame, FeaturesTrackingFrame, StereoFrame]:
+    def inject_file_to_stream(self, stream_type: StreamType, frame_path: str) -> Union[ImageFrame,
+    FeaturesTrackingFrame, StereoFrame, SlamFrame]:
         #   @brief Inject frame file to Stream
         #
         #   @param stream_type - EStreamType currently support EStreamType.Depth, EStreamType.Stereo,
@@ -91,10 +92,14 @@ class InjectionStream:
             frame = FeaturesTrackingFrame()
             self._sensor.InjectTrackingImage2FeaturesTrackingStream(frame_path, frame)
             return FeaturesTrackingFrame(frame)
+        elif stream_type == StreamType.SLAM:
+            frame = SlamF()
+            self._sensor.InjectTrackingImage2SlamStream(frame_path, frame)
+            return SlamFrame(frame)
         return None
 
     def inject_data_to_stream(self, stream_type: StreamType, data: np.array) -> Union[ImageFrame,
-    FeaturesTrackingFrame, StereoFrame]:
+    FeaturesTrackingFrame, StereoFrame, SlamFrame]:
         # @brief Inject frame data to Stram
         #
         #   @param stream_type - EStreamType currently support EStreamType.Depth, EStreamType.Stereo,
@@ -118,4 +123,8 @@ class InjectionStream:
             frame = FeaturesTrackingF()
             self._sensor.InjectTrackingImage2FeaturesTrackingStream(width, height, bytes_per_pixel, data, frame)
             return FeaturesTrackingFrame(frame)
+        elif stream_type == StreamType.SLAM:
+            frame = SlamF()
+            self._sensor.InjectTrackingImage2SlamStream(width, height, bytes_per_pixel, data, frame)
+            return SlamFrame(frame)
         return None

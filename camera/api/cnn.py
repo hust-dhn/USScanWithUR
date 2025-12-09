@@ -3,7 +3,8 @@ from .base_frame import BaseFrame
 from .cnn_defs import NetworkEngineType
 from .shared import InterliveModeFw, ImageFormatFw
 from .errors import Error
-from .InuStreamsPyth import CnnF, CnnS, CnnTailHdr, CevaF, SynopsysF, CnnFl, CnnFrameH, CnnImageDescr, InuError
+from .InuStreamsPyth import CnnF, CnnS, CnnTailHdr, CevaF, SynopsysF, CnnFl, CnnFrameH, CnnImageDescr, InuError, \
+    EInterliveModeFw, EImageFormatFw
 import numpy as np
 
 
@@ -409,7 +410,7 @@ class CnnImageDescriptor:
     def format(self, value: ImageFormatFw) -> None:
         """! format setter
         """
-        self.image_descr.Format = value
+        self.image_descr.Format = EImageFormatFw.EImageFormatFw(value)
 
     @property
     def x(self) -> int:
@@ -505,7 +506,7 @@ class CnnImageDescriptor:
     def interleave_mode(self, value: InterliveModeFw) -> None:
         """! interleave_mode setter
         """
-        self.image_descr.InterleaveMode = InterliveModeFw(value)
+        self.image_descr.InterleaveMode = EInterliveModeFw.EInterliveModeFw(value)
 
 
 class CnnStream(BaseStream):
@@ -533,25 +534,21 @@ class CnnStream(BaseStream):
         BaseStream.__init__(self, stream)
         self.stream = stream
 
-    def init(self) -> None:
-        """!
-            Service initialization.
-            Have be invoked once before starting frames acquisition.
-        """
-        self.stream.Init()
-
     def terminate(self) -> None:
         """!
             Stop frames acquisition, stop ant termination service.
         """
         self.stop_network()
-        self.register = None
-        self.stop()
-        self.stream.Terminate()
+        BaseStream.terminate()
 
     def register(self, callback) -> None:
         """!
             Registration/De registration for receiving stream frames (push)
+
+            All streams should use the same callback function when calling for “register”.
+            You can find an example for a callback function here: “multithread_callback_example.py” where
+             “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+             on the stream type.
 
             The provided callback function is called when a new frame is ready (non-blocking).
             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
@@ -570,7 +567,10 @@ class CnnStream(BaseStream):
             """
             BaseStream.callback(CnnStream(stream), CnnFrame(frame), Error(error))
         BaseStream.callback = callback
-        self.stream.Register(_callback_cast)
+        if callback is None:
+            self.stream.Register(None)
+        else:
+            self.stream.Register(_callback_cast)
     register = property(None, register)
 
     @property
@@ -596,7 +596,7 @@ class CnnStream(BaseStream):
         """
         self.stream.StopNetwork()
 
-    def write_data(self, streamer: str, image_descriptor, data: np.array, data_size: int, frame_id: int = 0) -> None:
+    def write_data(self, streamer: str, image_descriptor, data: np.array, frame_id: int = 0) -> None:
         """!
             Write buffer to CNN service.
             @ param     streamer          The name of the input streamer in the "sw graph", the buffer will be written to.
@@ -604,4 +604,4 @@ class CnnStream(BaseStream):
             @ param     data               Data buffer.
             @ param     data_size          Buffer length.
         """
-        self.stream.WriteData(streamer, image_descriptor._image_descr, data, data_size)
+        self.stream.WriteData(streamer, image_descriptor.image_descr, data, frame_id)

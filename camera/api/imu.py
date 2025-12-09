@@ -91,20 +91,6 @@ class ImuStream(BaseStream):
         BaseStream.__init__(self, stream)
         self._stream = stream
 
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
-
-    def init(self) -> None:
-        # @brief    Service initialization.
-        #
-        # Hall be invoked once before starting frames acquisition.
-        self._stream.Init()
-
     def register(self, callback) -> None:
         """!
             Registration/De registration for receiving stream frames (push)
@@ -126,7 +112,10 @@ class ImuStream(BaseStream):
             """
             BaseStream.callback(ImuStream(stream), ImuFrame(frame), Error(error))
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
+        if callback is None:
+            self._stream.Register(None)
+        else:
+            self._stream.Register(_callback_cast)
     register = property(None, register)
 
     @property

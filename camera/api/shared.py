@@ -89,6 +89,7 @@ class StreamType(IntEnum):
     INJECTION = 2048
     CNN_APP = 4096
     TEMPERATURE = 8192
+    GENERAL_CAMERA_REGISTERED = 16384
 
 
 class ChannelType(IntEnum):
@@ -716,6 +717,18 @@ class ChannelDimensions(CropParams):
     def buffer_width(self, value: int) -> None:
         # @brief    buffer_width setter.
         self.params.BufferWidth = value
+
+    @property
+    def buffer_height(self) -> int:
+        # @brief  The height of the output image from the channel after scaling in the chip.
+        #
+        # @return buffer_height.
+        return self.params.BufferHeight
+
+    @buffer_height.setter
+    def buffer_height(self, value: int) -> None:
+        # @brief    buffer_height setter.
+        self.params.BufferHeight = value
 
 
 class AlternateProjectorMode:

@@ -59,7 +59,7 @@ class DepthStream(BaseStream, DepthProperties, CroppingROI):
 
     # @brief    InuStreamsPyth.DepthS.
     #
-    _stream = None
+    stream = None
 
     def __init__(self, stream: DepthS):
         """! The Depth stream class initializer.
@@ -69,7 +69,7 @@ class DepthStream(BaseStream, DepthProperties, CroppingROI):
         BaseStream.__init__(self, stream)
         DepthProperties.__init__(self, stream)
         CroppingROI.__init__(self, stream)
-        self._stream = stream
+        self.stream = stream
 
     def init(self, form: DepthOutputFormat = DepthOutputFormat.DEFAULT,
              processing: DepthPostProcessing = DepthPostProcessing.NONE_PROCESSING) -> None:
@@ -78,38 +78,41 @@ class DepthStream(BaseStream, DepthProperties, CroppingROI):
         # Hall be invoked once before starting frames acquisition.
         # @param  format            The Output format that should be invoked.
         # @param  processing        The PostProcessing algorithms that should be invoked.
-        self._stream.Init(DepthS.EOutputFormat(form), DepthS.EPostProcessing(processing))
-
-    def terminate(self) -> None:
-        """!
-            Stop frames acquisition, stop ant termination service.
-        """
-        self.register = None
-        self.stop()
-        self._stream.Terminate()
+        self.stream.Init(DepthS.EOutputFormat(form), DepthS.EPostProcessing(processing))
 
     def register(self, callback) -> None:
         """!
             Registration/De registration for receiving stream frames (push)
 
+            All streams should use the same callback function when calling for “register”.
+            You can find an example for a callback function here: “multithread_callback_example.py” where
+             “_stream_callback_func“ can receive frames from different types of streams and acts differently based
+             on the stream type.
+
             The provided callback function is called when a new frame is ready (non-blocking).
             It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
-            @param  callback  The Callback function which is invoked when a new frame is ready. Send nullptr to
-                unregister for receiving frames.
+            If you need more than 1 stream you have to give in number of streams only 1 Callback function and after
+            checking Stream type inside perform needed process.
+            The parameters of this function are:
+            @param  callback  The Callback function which is invoked when a new frame is ready.
+             Send None to unregister for receiving frames.
         """
         def _callback_cast(stream: DepthS, frame: ImageF, error: InuError) -> None:
             """!
                 Prototype of callback function which is used by the Register method.
 
-                This function is invoked any time a frame is ready, or if an error occurs. The parameters of this
-                function are:
+                This function is invoked any time a frame is ready, or if an error occurs.
+                The parameters of this function are:
                 @param stream Caller depth stream object.
                 @param frame  Caller depth frame object.
                 @param error  Result code.
             """
             BaseStream.callback(DepthStream(stream), ImageFrame(frame), Error(error))
         BaseStream.callback = callback
-        self._stream.Register(_callback_cast)
+        if callback is None:
+            self.stream.Register(None)
+        else:
+            self.stream.Register(_callback_cast)
     register = property(None, register)
 
     @property
@@ -119,18 +122,8 @@ class DepthStream(BaseStream, DepthProperties, CroppingROI):
         # This method returns when a new frame is ready (blocking) or if an input timeout has elapsed.
         # It shall be called only after a start() was invoked but before any invocation of a stop() is invoked.
         # @return  The returned depth frame (Z-buffer).
-        fr = self._stream.GetFrame()
-        print(" Depth.frame {} Depth.frame ".format(fr.FrameIndex))
+        fr = self.stream.GetFrame()
         return ImageFrame(fr)
-
-    @property
-    def default_post_processing_mode(self) -> int:
-        # @brief default_post_processing_mode
-        #
-        # Detailed description:        Get current PostProcessingModeDefault.
-        #                              It's possible to use this function before or without starting the _stream.
-        # @return                      Return the default PostProcessingMode
-        return self._stream.DefaultPostProcessingMode()
 
     def mipi_on(self, on: bool) -> None:
         # @brief    start/stop Mipi
@@ -141,7 +134,7 @@ class DepthStream(BaseStream, DepthProperties, CroppingROI):
         # If several streams should be transmitted over mipi then the order of activation should be:
         # "Start / Stop" all streams then "startMipi" of all streams
         if on:
-            self._stream.startMipi()
+            self.stream.startMipi()
         else:
-            self._stream.stopMipi()
+            self.stream.stopMipi()
     mipi_on = property(None, mipi_on)
