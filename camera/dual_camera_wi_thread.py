@@ -16,7 +16,6 @@ bool_clear_imgs_file = True
 lc_imgs_filepath = "camera/lc_imgs/"
 rc_imgs_filepath = "camera/rc_imgs/"
 
-
 frame_counter_lc = 0
 frame_counter_rc = 0
 # #########################################################  main #####################################################

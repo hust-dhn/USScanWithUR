@@ -19,78 +19,132 @@ rc_imgs_filepath = "camera/rc_imgs/"
 frame_counter1 = 0
 frame_counter2 = 0
 
+def _sensor_callback_func1(sensor: InuSensor, connection_state: ConnectionState, error: Error) -> None:
+    print(f'Sensor callback ConnectionState1={connection_state} Error={error}')
+def _sensor_callback_func2(sensor: InuSensor, connection_state: ConnectionState, error: Error) -> None:
+    print(f'Sensor callback ConnectionState2={connection_state} Error={error}')
+def _print_frame1(frame: ImageFrame) -> None:
+    global frame_counter1  # Use the global counter to save each frame with a unique name
+    if frame is None:
+        print('Invalid RGB frame')
+    else:
+        print(f"\t------------------------------------- Depth {frame.frame_index} ---------------------------------")
+        print(f"{type(frame)} : Format {frame.format}, Height {frame.height}, Width{frame.width}, "
+            f"BytesPerPixel {frame.bytes_per_pixel}")
+        print("\t------------------------------------------------------------------------------------------")
+        depth_image = frame.image_frame  # Assuming 'image_frame' contains the image data  
+        print(f"depth_image.shape: {depth_image}")
+        if depth_image is not None:
+            # Ensure that the image is in the correct format (e.g., numpy array)
+            depth_image = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
+            # Save the frame as an image using OpenCV
+            image_filename = lc_imgs_filepath + f"{frame_counter1}.jpg"
+            cv2.imwrite(image_filename, depth_image)  # Save the image as a .jpg file
+            print(f"Saved frame {frame_counter1} as {image_filename}")        
+        # Increment the frame counter for the next image
+        frame_counter1 += 1
+
+def _print_frame2(frame: ImageFrame) -> None:
+    global frame_counter2  # Use the global counter to save each frame with a unique name
+    if frame is None:
+        print('Invalid RGB frame')
+    else:
+        print(f"\t------------------------------------- Depth {frame.frame_index} ---------------------------------")
+        print(f"{type(frame)} : Format {frame.format}, Height {frame.height}, Width{frame.width}, "
+            f"BytesPerPixel {frame.bytes_per_pixel}")
+        print("\t------------------------------------------------------------------------------------------")
+        depth_image = frame.image_frame  # Assuming 'image_frame' contains the image data
+        print(f"depth_image.shape: {depth_image}")
+        if depth_image is not None:
+            # Ensure that the image is in the correct format (e.g., numpy array)
+            depth_image = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
+
+            # Save the frame as an image using OpenCV
+            image_filename = rc_imgs_filepath + f"{frame_counter1}.jpg"
+            cv2.imwrite(image_filename, depth_image)  # Save the image as a .jpg file
+            print(f"Saved frame {frame_counter2} as {image_filename}")
+        # Increment the frame counter for the next image
+        frame_counter2 += 1
+
+def _general_camera_callback_func1(stream: ImageStream, frame: ImageFrame, error: Error) -> None:
+    if error is None:
+        print(f'Undefined error in {type(stream)}')
+    elif error.code != ErrorCode.STATUS_OK:
+        print(f'{type(stream)} callback Error = {error.code} {error.description}')
+    else:
+        _print_frame1(frame)
+
+def _general_camera_callback_func2(stream: ImageStream, frame: ImageFrame, error: Error) -> None:
+    if error is None:
+        print(f'Undefined error in {type(stream)}')
+    elif error.code != ErrorCode.STATUS_OK:
+        print(f'{type(stream)} callback Error = {error.code} {error.description}')
+    else:
+        _print_frame2(frame)
+
+def camera_init():
+    if bool_clear_imgs_file:
+        delete_jpg_files(lc_imgs_filepath)
+        delete_jpg_files(rc_imgs_filepath)
+    
+    print(f"Start test application")
+    sensor1 = InuSensor('1','')
+    sensor2 = InuSensor('2','')
+    hw_information1, dpe_params1 = sensor1.init()
+    hw_information2, dpe_params2 = sensor2.init()
+    channels_size1 = sensor1.start(None, dpe_params1)
+    channels_size2 = sensor2.start(None, dpe_params2) 
+    sensor1.register = _sensor_callback_func1
+    print(f"camera1_Sensor1 initialization finished")
+    sensor2.register = _sensor_callback_func2
+    print(f"camera2_Sensor2 initialization finished")
+    stream1 = sensor1.create_stream(StreamType.GENERAL_CAMERA)
+    stream2 = sensor2.create_stream(StreamType.GENERAL_CAMERA)
+    stream1.init()
+    stream2.init()
+    stream1.start()
+    stream2.start()
+    return sensor1, sensor2, stream1, stream2
+
+def get_frame_from_dual_camera(stream1: ImageStream, stream2: ImageStream) -> None:
+    lc_frame = stream1.frame
+    rc_frame = stream2.frame
+    for i in range(0, 10):
+        if lc_frame:
+            _print_frame1(lc_frame)
+            _print_frame2(rc_frame)
+        else:
+            print(f"iteration {i}: 未获取到帧")
+        print(f"iteration {i}")
+        time.sleep(0.1)
+
+def camera_close(sensor1: InuSensor, sensor2: InuSensor, stream1: ImageStream, stream2: ImageStream) -> None:
+    # 确保资源被释放
+    print(f"Finish test application")
+    try:
+        if 'stream' in locals():
+            stream1.stop()
+            stream2.stop()
+            stream1.terminate()
+            stream2.terminate()
+            print(f"{type(stream1)} Stopped")
+            print(f"{type(stream2)} Stopped")
+    except:
+        pass
+        
+    try:
+        if 'sensor' in locals():
+            sensor1.register = None
+            sensor2.register = None
+            sensor1.stop()
+            sensor2.stop()
+            sensor1.terminate()
+            sensor2.terminate()
+            print(f'Sensor stopped')
+    except:
+        pass
+
 if __name__ == "__main__":
-    def _sensor_callback_func1(sensor: InuSensor, connection_state: ConnectionState, error: Error) -> None:
-        print(f'Sensor callback ConnectionState1={connection_state} Error={error}')
-    def _sensor_callback_func2(sensor: InuSensor, connection_state: ConnectionState, error: Error) -> None:
-        print(f'Sensor callback ConnectionState2={connection_state} Error={error}')
-    def _print_frame1(frame: ImageFrame) -> None:
-        global frame_counter1  # Use the global counter to save each frame with a unique name
-        if frame is None:
-            print('Invalid RGB frame')
-        else:
-            print(f"\t------------------------------------- Depth {frame.frame_index} ---------------------------------")
-            print(f"{type(frame)} : Format {frame.format}, Height {frame.height}, Width{frame.width}, "
-                f"BytesPerPixel {frame.bytes_per_pixel}")
-            print("\t------------------------------------------------------------------------------------------")
-
-            depth_image = frame.image_frame  # Assuming 'image_frame' contains the image data
-            
-            print(f"depth_image.shape: {depth_image}")
-
-            if depth_image is not None:
-                # Ensure that the image is in the correct format (e.g., numpy array)
-                depth_image = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
-
-                # Save the frame as an image using OpenCV
-                image_filename = lc_imgs_filepath + f"{frame_counter1}.jpg"
-                cv2.imwrite(image_filename, depth_image)  # Save the image as a .jpg file
-                print(f"Saved frame {frame_counter1} as {image_filename}")
-            
-            # Increment the frame counter for the next image
-            frame_counter1 += 1
-    def _print_frame2(frame: ImageFrame) -> None:
-        global frame_counter2  # Use the global counter to save each frame with a unique name
-        if frame is None:
-            print('Invalid RGB frame')
-        else:
-            print(f"\t------------------------------------- Depth {frame.frame_index} ---------------------------------")
-            print(f"{type(frame)} : Format {frame.format}, Height {frame.height}, Width{frame.width}, "
-                f"BytesPerPixel {frame.bytes_per_pixel}")
-            print("\t------------------------------------------------------------------------------------------")
-
-            depth_image = frame.image_frame  # Assuming 'image_frame' contains the image data
-            
-            print(f"depth_image.shape: {depth_image}")
-
-            if depth_image is not None:
-                # Ensure that the image is in the correct format (e.g., numpy array)
-                depth_image = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
-
-                # Save the frame as an image using OpenCV
-                image_filename = rc_imgs_filepath + f"{frame_counter1}.jpg"
-                cv2.imwrite(image_filename, depth_image)  # Save the image as a .jpg file
-                print(f"Saved frame {frame_counter2} as {image_filename}")
-            
-            # Increment the frame counter for the next image
-            frame_counter2 += 1
-
-    def _general_camera_callback_func1(stream: ImageStream, frame: ImageFrame, error: Error) -> None:
-        if error is None:
-            print(f'Undefined error in {type(stream)}')
-        elif error.code != ErrorCode.STATUS_OK:
-            print(f'{type(stream)} callback Error = {error.code} {error.description}')
-        else:
-            _print_frame1(frame)
-
-    def _general_camera_callback_func2(stream: ImageStream, frame: ImageFrame, error: Error) -> None:
-        if error is None:
-            print(f'Undefined error in {type(stream)}')
-        elif error.code != ErrorCode.STATUS_OK:
-            print(f'{type(stream)} callback Error = {error.code} {error.description}')
-        else:
-            _print_frame2(frame)
-
     if bool_clear_imgs_file:
         delete_jpg_files(lc_imgs_filepath)
         delete_jpg_files(rc_imgs_filepath)
