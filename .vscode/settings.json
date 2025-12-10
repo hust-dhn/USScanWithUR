@@ -1,5 +1,4 @@
 {
-    "ros.distro": "humble",
     "python.autoComplete.extraPaths": [
         "/home/zzz/ros2_ws/install/my_ur10e_control/lib/python3.10/site-packages",
         "/opt/ros/humble/lib/python3.10/site-packages",
@@ -13,6 +12,5 @@
         "/opt/ros/humble/local/lib/python3.10/dist-packages",
         "",
         "/home/zzz/zzz_ws/src/DeformableAffordance-main/PyFlex"
-    ],
-    "cmake.sourceDirectory": "/home/zzz/ros2_ws/src/my_ur10e_control/display_camera"
+    ]
 }

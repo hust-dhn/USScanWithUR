@@ -7,9 +7,14 @@ from api.image_stream import ImageStream
 from api.depth_stream import DepthStream
 from api.shared import StreamType
 import time
-
 import cv2
 import numpy as np
+from function.clear_files import delete_jpg_files
+
+# need to set params
+bool_clear_imgs_file = True
+lc_imgs_filepath = "camera/lc_imgs/"
+rc_imgs_filepath = "camera/rc_imgs/"
 
 frame_counter1 = 0
 frame_counter2 = 0
@@ -38,7 +43,7 @@ if __name__ == "__main__":
                 depth_image = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
 
                 # Save the frame as an image using OpenCV
-                image_filename = f"{frame_counter1}.jpg"
+                image_filename = lc_imgs_filepath + f"{frame_counter1}.jpg"
                 cv2.imwrite(image_filename, depth_image)  # Save the image as a .jpg file
                 print(f"Saved frame {frame_counter1} as {image_filename}")
             
@@ -63,20 +68,12 @@ if __name__ == "__main__":
                 depth_image = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
 
                 # Save the frame as an image using OpenCV
-                image_filename = f"{frame_counter2}.jpg"
+                image_filename = rc_imgs_filepath + f"{frame_counter1}.jpg"
                 cv2.imwrite(image_filename, depth_image)  # Save the image as a .jpg file
                 print(f"Saved frame {frame_counter2} as {image_filename}")
             
             # Increment the frame counter for the next image
             frame_counter2 += 1
-    
-    #def _depth_callback_func(stream: DepthStream, frame: ImageFrame, error: Error) -> None:
-    #    if error is None:
-    #        print(f'Undefined error in {type(stream)}')
-    #    elif error.code != ErrorCode.STATUS_OK:
-    #        print(f'{type(stream)} callback Error = {error.code} {error.description}')
-    #    else:
-    #        _print_frame(frame)
 
     def _general_camera_callback_func1(stream: ImageStream, frame: ImageFrame, error: Error) -> None:
         if error is None:
@@ -85,6 +82,7 @@ if __name__ == "__main__":
             print(f'{type(stream)} callback Error = {error.code} {error.description}')
         else:
             _print_frame1(frame)
+
     def _general_camera_callback_func2(stream: ImageStream, frame: ImageFrame, error: Error) -> None:
         if error is None:
             print(f'Undefined error in {type(stream)}')
@@ -93,6 +91,10 @@ if __name__ == "__main__":
         else:
             _print_frame2(frame)
 
+    if bool_clear_imgs_file:
+        delete_jpg_files(lc_imgs_filepath)
+        delete_jpg_files(rc_imgs_filepath)
+    
     print(f"Start test application")
     sensor1 = InuSensor('1','')
     sensor2 = InuSensor('2','')
@@ -138,10 +140,10 @@ if __name__ == "__main__":
         stream2.start()
 
         # 注册数据流回调
-        stream1.register = _general_camera_callback_func1
-        print("General Camera1 stream initialization finished")
-        stream2.register = _general_camera_callback_func2
-        print("General Camera2 stream initialization finished")
+        # stream1.register = _general_camera_callback_func1
+        # print("General Camera1 stream initialization finished")
+        # stream2.register = _general_camera_callback_func2
+        # print("General Camera2 stream initialization finished")
 
         for i in range(0, 5000):
             try:
@@ -154,7 +156,7 @@ if __name__ == "__main__":
                 else:
                     print(f"iteration {i}: 未获取到帧")
                 print(f"iteration {i}")
-                time.sleep(1)
+                time.sleep(0.5)
             except KeyboardInterrupt:
                 print("用户中断")
                 break

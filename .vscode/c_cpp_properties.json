@@ -7,8 +7,10 @@
       },
       "includePath": [
         "/opt/ros/humble/include/**",
-        "/home/zzz/ros2_ws/src/my_ur10e_control/SDK_CAMERA/ros1/ros1/ros1/src/inudev_ros_nodelet/include/**",
-        "/home/zzz/ros2_ws/src/my_ur10e_control/SDK_CAMERA/sample/example/example/CPP/include/**",
+        "/home/zzz/ros2_ws/src/my_ur10e_control/linux_x86/inudev_4.36.0008.02-1_amd64/opt/inudev-4.36.0008.02/Inuitive/InuDev/FDK/nu4000c0/src/client_demo/IR_cnn_demo/ev/graphs/2022_09SP1/inu_multi_lib/include/**",
+        "/home/zzz/ros2_ws/src/my_ur10e_control/linux_x86/inudev_4.36.0008.02-1_amd64/opt/inudev-4.36.0008.02/Inuitive/InuDev/FDK/nu4000c0/src/client_demo/cnn_client_demo/ev/graphs/2022_09SP1/inu_multi_lib/include/**",
+        "/home/zzz/ros2_ws/src/my_ur10e_control/linux_x86/inudev_4.36.0008.02-1_amd64/opt/inudev-4.36.0008.02/Inuitive/InuDev/FDK/nu4100/src/client_demo/IR_cnn_demo/ev/graphs/2022_09SP1/inu_multi_lib/include/**",
+        "/home/zzz/ros2_ws/src/my_ur10e_control/linux_x86/inudev_4.36.0008.02-1_amd64/opt/inudev-4.36.0008.02/Inuitive/InuDev/FDK/nu4100/src/client_demo/cnn_client_demo/ev/graphs/2022_09SP1/inu_multi_lib/include/**",
         "/usr/include/**"
       ],
       "name": "ROS",
