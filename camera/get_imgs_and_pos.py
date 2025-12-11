@@ -16,8 +16,8 @@ from dual_camera_wo_thread import DualCamera
 # 参数配置
 # ====================
 # 机器人参数
-sensor_mass = 0.820  # 传感器质量，单位：千克
-sensor_cog = [0.007, -0.006, 0.07]  # 质心位置，单位：米
+sensor_mass = 0.790  # 传感器质量，单位：千克
+sensor_cog = [0.034, 0.004, 0.069]  # 质心位置，单位：米
 robot_ip = "192.168.253.101"
 
 # 相机参数（不再使用 OpenCV VideoCapture）
@@ -301,6 +301,7 @@ def save_robot_poses_to_file(poses, filename=ROBOT_POS_FILE):
     """
     将所有机器人位姿保存到文件
     
+
     :param poses: 位姿列表，每个位姿是16元素列表（4x4矩阵展开）
     :param filename: 保存文件名
     """
@@ -318,7 +319,7 @@ def save_robot_poses_to_file(poses, filename=ROBOT_POS_FILE):
 
 # ====================
 # 多线程函数
-# ====================
+# ====================                                                                                                                                       
 def thread_display_live_view():
     """
     线程1：实时显示左右相机的画面
