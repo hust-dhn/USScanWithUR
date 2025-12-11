@@ -25,8 +25,8 @@ if __name__ == "__main__":
     folder_path_debug_imgs = "camera/calib_output/debug_images/"  # 替换为目标文件夹路径
     delete_jpg_files(folder_path_debug_imgs)
 
-    folder_path_lc_imgs = "camera/lc_imgs/"  # 替换为目标文件夹路径
-    delete_jpg_files(folder_path_lc_imgs)
+    # folder_path_lc_imgs = "camera/lc_imgs/"  # 替换为目标文件夹路径
+    # delete_jpg_files(folder_path_lc_imgs)
 
-    folder_path_rc_imgs = "camera/rc_imgs/"  # 替换为目标文件夹路径
-    delete_jpg_files(folder_path_rc_imgs)
+    # folder_path_rc_imgs = "camera/rc_imgs/"  # 替换为目标文件夹路径
+    # delete_jpg_files(folder_path_rc_imgs)

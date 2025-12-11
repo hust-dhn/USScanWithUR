@@ -20,8 +20,13 @@
 
 在弹出的设置窗口中，将 网络代理 设置为 自动。这将允许系统根据网络环境自动选择代理设置。
 
-# Helper: xxxx
+
+# Helper: 重新安装驱动
+
+## 步骤：
 cd /home/zzz/ros2_ws/src/my_ur10e_control/camera/linux_x86
 sudo dpkg -i inudev_4.36.0008.02-1_amd64.deb
+
+# Helper: xxxx
 
 
