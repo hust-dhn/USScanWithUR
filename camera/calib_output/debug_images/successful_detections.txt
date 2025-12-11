@@ -1,0 +1,4 @@
+Total: 0 successful detections out of 550
+
+Index | Image Path
+------|----------------------------------------

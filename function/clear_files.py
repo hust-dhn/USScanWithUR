@@ -16,3 +16,17 @@ def delete_jpg_files(folder_path):
 # # 使用示例
 # folder_path = "/path/to/your/folder"  # 替换为目标文件夹路径
 # delete_jpg_files(folder_path)
+
+if __name__ == "__main__":
+
+    folder_path = "camera/calib_output/"  # 替换为目标文件夹路径
+    delete_jpg_files(folder_path)
+
+    folder_path_debug_imgs = "camera/calib_output/debug_images/"  # 替换为目标文件夹路径
+    delete_jpg_files(folder_path_debug_imgs)
+
+    folder_path_lc_imgs = "camera/lc_imgs/"  # 替换为目标文件夹路径
+    delete_jpg_files(folder_path_lc_imgs)
+
+    folder_path_rc_imgs = "camera/rc_imgs/"  # 替换为目标文件夹路径
+    delete_jpg_files(folder_path_rc_imgs)

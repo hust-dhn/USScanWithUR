@@ -26,7 +26,7 @@ IMG_WIDTH = 1600
 IMG_HEIGHT = 1200
 
 # 图像和位姿存储参数
-NUM_POSES = 55  # 生成55个位姿
+NUM_POSES = 30  # 生成30个位姿（减少但增加多样性）
 LC_IMG_DIR = "camera/lc_imgs/"  # 左相机图像文件夹
 RC_IMG_DIR = "camera/rc_imgs/"  # 右相机图像文件夹
 ROBOT_POS_FILE = "camera/robot_pos.txt"  # 机器人位姿文件
@@ -57,7 +57,7 @@ display_stop_event = threading.Event()  # 停止显示线程的事件
 robot_stop_event = threading.Event()    # 停止机器人线程的事件
 
 # 扫描控制
-FRAMES_PER_POSE = 10  # 每个位姿保存的帧数
+FRAMES_PER_POSE = 3  # 每个位姿保存的帧数（每个位姿拍3张，且每张对应一行位姿）
 
 
 # ====================
@@ -133,38 +133,44 @@ def generate_random_poses(num_poses=55):
         print(f"[Warning] 获取当前位置失败: {e}")
         current_pose = [0.3, 0.1, 0.2, 0, 0, 0]  # 默认位置
     
-    # 生成55个位姿
-    # 这里采用网格式生成：改变x和y坐标
+    # 生成 num_poses 个具有位置和旋转变化的位姿
     x_base, y_base, z_base = current_pose[0], current_pose[1], current_pose[2]
     rx_base, ry_base, rz_base = current_pose[3], current_pose[4], current_pose[5]
-    
-    # 创建一个5x11的网格（共55个点）
-    x_offsets = np.linspace(-0.05, 0.05, 11)  # x方向，-5cm到+5cm
-    y_offsets = np.linspace(-0.1, 0.1, 5)    # y方向，-10cm到+10cm
-    
+
+    # 位置变化（网格或抖动）
+    nx = int(np.ceil(np.sqrt(num_poses)))
+    ny = int(np.ceil(num_poses / nx))
+    x_span = 0.08  # x方向总范围 +/-4cm
+    y_span = 0.12  # y方向总范围 +/-6cm
+    x_offsets = np.linspace(-x_span/2, x_span/2, nx)
+    y_offsets = np.linspace(-y_span/2, y_span/2, ny)
+
+    # 旋转变化：给每个位姿一个不同的rx偏移（弧度），范围约 +/-20度
+    rot_offsets = np.linspace(-0.35, 0.35, num_poses)
+
     idx = 0
-    for y_offset in y_offsets:
-        for x_offset in x_offsets:
+    for yi, y_offset in enumerate(y_offsets):
+        for xi, x_offset in enumerate(x_offsets):
             if idx >= num_poses:
                 break
-            
-            # 创建4x4变换矩阵
-            # 简单的方式：只改变位置，旋转保持不变
+
+            rx = rx_base + float(rot_offsets[idx])
+            ry = ry_base + float(0.05 * np.sin(idx))  # small variation in ry
+            rz = rz_base + float(0.05 * np.cos(idx))  # small variation in rz
+
             pose_6d = [
-                x_base + x_offset,
-                y_base + y_offset,
+                x_base + float(x_offset),
+                y_base + float(y_offset),
                 z_base,
-                rx_base,
-                ry_base,
-                rz_base
+                rx,
+                ry,
+                rz,
             ]
-            
-            # 将6D位姿转换为4x4矩阵（这里简化处理）
-            # 实际应用中应使用正确的旋转向量到旋转矩阵的转换
+
             pose_matrix = pose_6d_to_4x4(pose_6d)
             poses.append(pose_matrix)
             idx += 1
-        
+
         if idx >= num_poses:
             break
     
@@ -472,15 +478,14 @@ def automatic_scan_with_threads():
                     
                     print(f"[Main] 位姿 {pose_idx} 已保存第 {frame_in_pose+1}/{FRAMES_PER_POSE} 张: {frame_global_index}")
                     
-                    # 记录位姿（每个位姿只记录一次）
-                    if frame_in_pose == 0:
-                        try:
-                            current_pose = rtde_r.getActualTCPPose()
-                            pose_matrix_actual = pose_6d_to_4x4(current_pose)
-                            robot_poses.append(pose_matrix_actual)
-                            print(f"[Main] 已记录位姿 {pose_idx}: {[f'{x:.4f}' for x in current_pose]}")
-                        except Exception as ex:
-                            print(f"[Main] 记录位姿失败: {ex}")
+                    # 记录位姿（为每张图片记录一条位姿，保证一一对应）
+                    try:
+                        current_pose = rtde_r.getActualTCPPose()
+                        pose_matrix_actual = pose_6d_to_4x4(current_pose)
+                        robot_poses.append(pose_matrix_actual)
+                        print(f"[Main] 已记录位姿（图像对应）: {[f'{x:.4f}' for x in current_pose]}")
+                    except Exception as ex:
+                        print(f"[Main] 记录位姿失败: {ex}")
                     
                     frame_global_index += 1
                 

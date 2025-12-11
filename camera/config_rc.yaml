@@ -9,8 +9,8 @@ camera:
   distortion_coeffs: [0, 0, 0, 0, 0]  # 畸变系数（假设无畸变）
 
 chessboard:
-  size: [9, 6]  # 棋盘格行列数
-  square_size: 0.025  # 每个格子的物理尺寸（单位：米）
+  size: [20, 20]  # 棋盘格行列数
+  square_size: 0.01  # 每个格子的物理尺寸（单位：米）
 
 robot_poses_file: "robot_pos.txt"  # 机器人位姿文件路径
 image_folder: "rc_imgs"  # 右相机图像文件夹路径
