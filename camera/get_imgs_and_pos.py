@@ -7,6 +7,10 @@ import cv2
 import yaml
 from pathlib import Path
 from datetime import datetime
+from queue import Queue
+from pynput import keyboard
+
+from dual_camera_wo_thread import DualCamera
 
 # ====================
 # 参数配置
@@ -16,17 +20,16 @@ sensor_mass = 0.820  # 传感器质量，单位：千克
 sensor_cog = [0.007, -0.006, 0.07]  # 质心位置，单位：米
 robot_ip = "192.168.253.101"
 
-# 相机参数
-CAMERA_LC_INDEX = 0  # 左相机编号
-CAMERA_RC_INDEX = 1  # 右相机编号
-IMG_WIDTH = 1280
-IMG_HEIGHT = 960
+# 相机参数（不再使用 OpenCV VideoCapture）
+# 保留图像尺寸常量用于保存/处理（可按需修改）
+IMG_WIDTH = 1600
+IMG_HEIGHT = 1200
 
 # 图像和位姿存储参数
 NUM_POSES = 55  # 生成55个位姿
-LC_IMG_DIR = "lc_imgs"  # 左相机图像文件夹
-RC_IMG_DIR = "rc_imgs"  # 右相机图像文件夹
-ROBOT_POS_FILE = "robot_pos.txt"  # 机器人位姿文件
+LC_IMG_DIR = "camera/lc_imgs/"  # 左相机图像文件夹
+RC_IMG_DIR = "camera/rc_imgs/"  # 右相机图像文件夹
+ROBOT_POS_FILE = "camera/robot_pos.txt"  # 机器人位姿文件
 IMG_FORMAT = ".jpg"  # 图像格式
 
 # ====================
@@ -38,8 +41,23 @@ quit_flag = False
 
 # 存储数据
 robot_poses = []  # 存储所有的4x4变换矩阵
-left_camera = None
-right_camera = None
+
+# DualCamera 实例（在 initialize_cameras 中创建）
+_dual_camera = None
+
+# 多线程相关
+thread_display = None
+thread_robot = None
+thread_keyboard = None
+
+# 线程间通信
+start_scan_event = threading.Event()    # 开始扫描的事件
+stop_scan_event = threading.Event()     # 停止扫描的事件
+display_stop_event = threading.Event()  # 停止显示线程的事件
+robot_stop_event = threading.Event()    # 停止机器人线程的事件
+
+# 扫描控制
+FRAMES_PER_POSE = 10  # 每个位姿保存的帧数
 
 
 # ====================
@@ -64,24 +82,18 @@ def initialize_robot():
 
 def initialize_cameras():
     """初始化左右相机"""
-    global left_camera, right_camera
+    global left_camera, right_camera, _dual_camera
     try:
-        left_camera = cv2.VideoCapture(CAMERA_LC_INDEX)
-        right_camera = cv2.VideoCapture(CAMERA_RC_INDEX)
-        
-        # 设置相机分辨率
-        left_camera.set(cv2.CAP_PROP_FRAME_WIDTH, IMG_WIDTH)
-        left_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, IMG_HEIGHT)
-        right_camera.set(cv2.CAP_PROP_FRAME_WIDTH, IMG_WIDTH)
-        right_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, IMG_HEIGHT)
-        
-        # 检查相机是否成功打开
-        if not left_camera.isOpened() or not right_camera.isOpened():
-            print("[Error] 无法打开相机")
+        # 使用 DualCamera 类进行初始化
+        _dual_camera = DualCamera(lc_imgs_path=LC_IMG_DIR, rc_imgs_path=RC_IMG_DIR, clear_on_init=False)
+        ok = _dual_camera.initialize()
+        if not ok:
+            print("[Error] DualCamera 初始化失败")
             return False
-        
-        print(f"[Camera] 相机已初始化")
-        print(f"[Camera] 分辨率: {IMG_WIDTH}x{IMG_HEIGHT}")
+        # left_camera/right_camera are not cv2.VideoCapture here, keep as None for compatibility
+        left_camera = None
+        right_camera = None
+        print(f"[Camera] DualCamera 已初始化")
         return True
     except Exception as e:
         print(f"[Error] 相机初始化失败: {e}")
@@ -212,28 +224,35 @@ def capture_images_from_both_cameras(pose_index):
     :return: 是否拍照成功
     """
     try:
-        # 拍摄左相机
-        ret_lc, frame_lc = left_camera.read()
-        if not ret_lc or frame_lc is None:
-            print(f"[Error] 左相机拍摄失败，位姿 {pose_index}")
+        # 仅使用 DualCamera 获取帧（不再使用 OpenCV VideoCapture）
+        global _dual_camera
+        if _dual_camera is None:
+            print(f"[Error] DualCamera 未初始化，无法拍照（位姿 {pose_index}）")
             return False
-        
-        # 拍摄右相机
-        ret_rc, frame_rc = right_camera.read()
-        if not ret_rc or frame_rc is None:
-            print(f"[Error] 右相机拍摄失败，位姿 {pose_index}")
+
+        frame1, frame2 = _dual_camera.get_frames()
+        if frame1 is None or frame2 is None:
+            print(f"[Error] DualCamera 未获取到帧，位姿 {pose_index}")
             return False
-        
-        # 保存左相机图像
-        lc_filename = f"{LC_IMG_DIR}/{pose_index}{IMG_FORMAT}"
-        cv2.imwrite(lc_filename, frame_lc)
-        
-        # 保存右相机图像
-        rc_filename = f"{RC_IMG_DIR}/{pose_index}{IMG_FORMAT}"
-        cv2.imwrite(rc_filename, frame_rc)
-        
-        print(f"[Camera] 已保存图像 {pose_index}: {lc_filename}, {rc_filename}")
-        return True
+
+        # 将 frame.buffer 转为 numpy image 并保存为要求的命名
+        try:
+            if getattr(frame1, 'buffer', None) is None or getattr(frame2, 'buffer', None) is None:
+                print(f"[Error] 帧缓冲为空，位姿 {pose_index}")
+                return False
+
+            img_l = np.array(frame1.buffer, dtype=np.uint8).reshape(frame1.height, frame1.width, 4)
+            img_r = np.array(frame2.buffer, dtype=np.uint8).reshape(frame2.height, frame2.width, 4)
+
+            lc_filename = f"{LC_IMG_DIR}/{pose_index}{IMG_FORMAT}"
+            rc_filename = f"{RC_IMG_DIR}/{pose_index}{IMG_FORMAT}"
+            cv2.imwrite(lc_filename, img_l)
+            cv2.imwrite(rc_filename, img_r)
+            print(f"[Camera] 已保存图像 {pose_index}: {lc_filename}, {rc_filename}")
+            return True
+        except Exception as ex:
+            print(f"[Error] 保存帧时出错: {ex}")
+            return False
     except Exception as e:
         print(f"[Error] 拍照过程中出错: {e}")
         return False
@@ -298,11 +317,217 @@ def save_robot_poses_to_file(poses, filename=ROBOT_POS_FILE):
 
 
 # ====================
-# 主扫描函数
+# 多线程函数
 # ====================
-def scan_with_positions():
+def thread_display_live_view():
     """
-    主扫描函数：移动机器人到55个位姿，拍照并记录位姿
+    线程1：实时显示左右相机的画面
+    """
+    print("[Thread-Display] 实时显示线程已启动")
+    
+    try:
+        _dual_camera.display_live_view(duration=None)
+    except Exception as e:
+        print(f"[Thread-Display] 错误: {e}")
+    finally:
+        print("[Thread-Display] 实时显示线程已停止")
+        display_stop_event.set()
+
+
+def thread_keyboard_control():
+    """
+    线程2：监听键盘，按 's' 开始扫描，按 'q' 退出
+    """
+    print("[Thread-Keyboard] 键盘监听线程已启动")
+    print("[Thread-Keyboard] 按 's' 开始扫描，按 'q' 退出")
+    
+    def on_press(key):
+        try:
+            # 按下 's' 键开始扫描
+            if hasattr(key, 'char') and key.char == 's':
+                print(f"\n[Thread-Keyboard] 用户按下 's'，开始扫描")
+                start_scan_event.set()
+            
+            # 按下 'q' 键退出
+            elif hasattr(key, 'char') and key.char == 'q':
+                print(f"\n[Thread-Keyboard] 用户按下 'q'，停止扫描")
+                stop_scan_event.set()
+                display_stop_event.set()
+                return False
+        
+        except AttributeError:
+            pass
+    
+    try:
+        with keyboard.Listener(on_press=on_press) as listener:
+            while not stop_scan_event.is_set():
+                time.sleep(0.1)
+            listener.stop()
+    
+    except Exception as e:
+        print(f"[Thread-Keyboard] 错误: {e}")
+    finally:
+        print("[Thread-Keyboard] 键盘监听线程已停止")
+        stop_scan_event.set()
+
+
+def automatic_scan_with_threads():
+    """
+    自动扫描：移动机器人到55个位姿，在每个位姿自动拍摄10张照片
+    """
+    global thread_display, thread_keyboard
+    
+    print("\n" + "="*50)
+    print("自动扫描过程（多线程）")
+    print("="*50)
+    print("[Info] 控制说明:")
+    print("       - 按 's' 键开始扫描")
+    print("       - 按 'q' 键停止扫描和退出")
+    print("="*50 + "\n")
+    
+    try:
+        # 启动显示线程
+        thread_display = threading.Thread(target=thread_display_live_view, daemon=True)
+        thread_display.start()
+        
+        # 启动键盘监听线程
+        thread_keyboard = threading.Thread(target=thread_keyboard_control, daemon=True)
+        thread_keyboard.start()
+        
+        print("[Main] 等待用户按 's' 键开始扫描...")
+        
+        # 等待用户按 's' 键开始
+        start_scan_event.wait()
+        
+        if stop_scan_event.is_set():
+            print("[Main] 用户取消扫描")
+            return False
+        
+        print("[Main] 扫描已开始！")
+        
+        # 生成位姿
+        generated_poses = generate_random_poses(NUM_POSES)
+        
+        frame_global_index = 0  # 全局帧索引
+        
+        # 遍历每个位姿
+        for pose_idx in range(NUM_POSES):
+            if stop_scan_event.is_set():
+                print("[Main] 用户停止扫描")
+                break
+            
+            pose_matrix = generated_poses[pose_idx]
+            pose_6d = pose_4x4_to_6d(pose_matrix)
+            
+            print(f"\n[Main] ========== 位姿 {pose_idx}/{NUM_POSES-1} ==========")
+            print(f"[Main] 目标位姿: {[f'{x:.4f}' for x in pose_6d]}")
+            
+            # 移动机器人到该位姿
+            print(f"[Main] 正在移动到位姿 {pose_idx}...")
+            if not move_to_pose(pose_6d, velocity=0.2, acceleration=0.1):
+                print(f"[Main] 位姿 {pose_idx} 移动失败，跳过")
+                continue
+            
+            # 等待机器人到达稳定状态
+            print(f"[Main] 等待机器人稳定（1秒）...")
+            time.sleep(1.0)
+            
+            # 验证机器人是否到达目标位姿（可选，取决于精度要求）
+            try:
+                current_pose = rtde_r.getActualTCPPose()
+                print(f"[Main] 当前位置: {[f'{x:.4f}' for x in current_pose]}")
+            except:
+                pass
+            
+            # 在该位姿自动保存 10 张照片
+            print(f"[Main] 开始在位姿 {pose_idx} 保存 {FRAMES_PER_POSE} 张照片...")
+            
+            for frame_in_pose in range(FRAMES_PER_POSE):
+                if stop_scan_event.is_set():
+                    print("[Main] 用户停止扫描")
+                    break
+                
+                # 获取当前帧
+                frame1, frame2 = _dual_camera.get_frames()
+                
+                if frame1 is None or frame2 is None:
+                    print(f"[Main] 位姿 {pose_idx} 第 {frame_in_pose+1} 帧获取失败")
+                    continue
+                
+                # 保存帧
+                try:
+                    if getattr(frame1, 'buffer', None) is None or getattr(frame2, 'buffer', None) is None:
+                        print(f"[Main] 位姿 {pose_idx} 第 {frame_in_pose+1} 帧缓冲为空")
+                        continue
+                    
+                    img_l = np.array(frame1.buffer, dtype=np.uint8).reshape(frame1.height, frame1.width, 4)
+                    img_r = np.array(frame2.buffer, dtype=np.uint8).reshape(frame2.height, frame2.width, 4)
+                    
+                    lc_filename = f"{LC_IMG_DIR}/{frame_global_index}{IMG_FORMAT}"
+                    rc_filename = f"{RC_IMG_DIR}/{frame_global_index}{IMG_FORMAT}"
+                    
+                    cv2.imwrite(lc_filename, img_l)
+                    cv2.imwrite(rc_filename, img_r)
+                    
+                    print(f"[Main] 位姿 {pose_idx} 已保存第 {frame_in_pose+1}/{FRAMES_PER_POSE} 张: {frame_global_index}")
+                    
+                    # 记录位姿（每个位姿只记录一次）
+                    if frame_in_pose == 0:
+                        try:
+                            current_pose = rtde_r.getActualTCPPose()
+                            pose_matrix_actual = pose_6d_to_4x4(current_pose)
+                            robot_poses.append(pose_matrix_actual)
+                            print(f"[Main] 已记录位姿 {pose_idx}: {[f'{x:.4f}' for x in current_pose]}")
+                        except Exception as ex:
+                            print(f"[Main] 记录位姿失败: {ex}")
+                    
+                    frame_global_index += 1
+                
+                except Exception as ex:
+                    print(f"[Main] 保存帧时出错: {ex}")
+                
+                # 保存帧之间的间隔
+                time.sleep(0.1)
+            
+            print(f"[Main] 位姿 {pose_idx} 完成，共保存 {FRAMES_PER_POSE} 张照片")
+        
+        print("\n[Main] 自动扫描完成")
+        print(f"[Main] 成功采集 {len(robot_poses)} 个位姿，共 {frame_global_index} 张照片")
+        
+        # 保存所有位姿到文件
+        if len(robot_poses) > 0:
+            save_robot_poses_to_file(robot_poses)
+        
+        return True
+    
+    except Exception as e:
+        print(f"[Error] 扫描过程出错: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    
+    finally:
+        # 确保所有事件都已设置
+        display_stop_event.set()
+        robot_stop_event.set()
+        stop_scan_event.set()
+        
+        # 等待所有线程完成
+        if thread_display and thread_display.is_alive():
+            thread_display.join(timeout=5)
+        if thread_keyboard and thread_keyboard.is_alive():
+            thread_keyboard.join(timeout=5)
+        
+        print("[Main] 所有线程已停止")
+
+
+# ====================
+# 主扫描函数（已弃用，使用多线程版本 interactive_scan_with_threads）
+# ====================
+def scan_with_positions_legacy():
+    """
+    遗留的单线程扫描函数：移动机器人到55个位姿，拍照并记录位姿
+    该函数已被 interactive_scan_with_threads 取代
     """
     global robot_poses, quit_flag
     
@@ -364,21 +589,22 @@ def cleanup():
     try:
         print("\n[Cleanup] 正在清理资源...")
         
-        # 释放相机
-        if left_camera is not None:
-            left_camera.release()
-        if right_camera is not None:
-            right_camera.release()
-        
+        # 关闭 DualCamera（如果存在）
+        if '_dual_camera' in globals() and _dual_camera is not None:
+            try:
+                _dual_camera.close()
+            except Exception:
+                pass
+
         # 停止机器人
         if rtde_c is not None:
             rtde_c.servoStop()
             rtde_c.stopScript()
             rtde_c.disconnect()
-        
+
         if rtde_r is not None:
             rtde_r.disconnect()
-        
+
         print("[Cleanup] 资源已清理完成")
     except Exception as e:
         print(f"[Error] 清理过程出错: {e}")
@@ -392,9 +618,11 @@ def main():
     global quit_flag
     
     print("\n" + "="*50)
-    print("机器人超声波扫描系统 - 图像采集和位姿记录")
+    print("机器人超声扫描系统 - 图像采集和位姿记录")
     print("="*50)
     print(f"[Config] 扫描位姿数: {NUM_POSES}")
+    print(f"[Config] 每个位姿保存帧数: {FRAMES_PER_POSE}")
+    print(f"[Config] 总预期照片数: {NUM_POSES * FRAMES_PER_POSE}")
     print(f"[Config] 左相机图像目录: {LC_IMG_DIR}")
     print(f"[Config] 右相机图像目录: {RC_IMG_DIR}")
     print(f"[Config] 位姿保存文件: {ROBOT_POS_FILE}")
@@ -413,19 +641,24 @@ def main():
         
         # 提示用户确认
         print("[Info] 系统已初始化完成")
-        print("[Info] 按 Enter 键开始扫描，或按 Ctrl+C 退出...")
+        print("[Info] 按 Enter 键继续，或按 Ctrl+C 退出...")
         input()
         
-        # 执行扫描
-        scan_with_positions()
+        # 执行自动扫描（使用多线程）
+        automatic_scan_with_threads()
         
         return True
     except KeyboardInterrupt:
         print("\n[Info] 用户中断")
         quit_flag = True
+        display_stop_event.set()
+        robot_stop_event.set()
+        stop_scan_event.set()
         return False
     except Exception as e:
         print(f"[Error] 程序出错: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     finally:
         cleanup()
