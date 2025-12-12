@@ -13,7 +13,7 @@ from function.clear_files import delete_jpg_files
 
 
 class DualCamera:
-    """双相机封装类，用于超声波扫描系统的图像采集"""
+    """双相机封装类，用于超声扫描系统的图像采集"""
     
     def __init__(self, lc_imgs_path="camera/lc_imgs/", rc_imgs_path="camera/rc_imgs/", 
                  clear_on_init=True):

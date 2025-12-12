@@ -11,7 +11,3 @@ camera:
 chessboard:
   size: [19, 19]  # 棋盘格行列数
   square_size: 0.01  # 每个格子的物理尺寸（单位：米，1cm）
-
-robot_poses_file: "robot_pos.txt"  # 机器人位姿文件路径
-image_folder: "lc_imgs"  # 左相机图像文件夹路径
-image_format: ".jpg"  # 左相机图像格式（可选：.jpg 或 .png）
