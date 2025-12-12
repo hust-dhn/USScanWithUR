@@ -93,14 +93,14 @@ def initialize_cameras():
             print("camera1各通道的图像尺寸:")
             for channel_id, size in _dual_camera.channels_size1.items():
                 print(f"  通道 {channel_id}: {size}")
-                data1 = _dual_camera.sensor1.get_calibration_data()
+                data1 = _dual_camera.sensor1.get_calibration_data(channel_id)
                 print(f"[Camera] Left Camera Calibration Data: {data1}")
         
         if hasattr(_dual_camera.channels_size2, 'items'):
             print("camera2各通道的图像尺寸:")
             for channel_id, size in _dual_camera.channels_size2.items():
                 print(f"  通道 {channel_id}: {size}")
-                data2 = _dual_camera.sensor2.get_calibration_data()
+                data2 = _dual_camera.sensor2.get_calibration_data(channel_id)
                 print(f"[Camera] Right Camera Calibration Data: {data2}")
 
         if not ok:
@@ -768,10 +768,9 @@ def main():
     except KeyboardInterrupt:
         print("\n[Info] 用户中断")
         quit_flag = True
-        
+        display_stop_event.set()
         robot_stop_event.set()
         stop_scan_event.set()
-        display_stop_event.set()
         return False
     except Exception as e:
         print(f"[Error] 程序出错: {e}")
