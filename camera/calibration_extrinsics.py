@@ -167,17 +167,13 @@ def hand_eye_calibration(robot_poses: List[np.ndarray], R_target2cam: List[np.nd
     except Exception as e:
         raise RuntimeError(f"calibrateHandEye failed: {e}")
 
-    # 构造 4x4 矩阵 X_cam2gripper
+    # 构造 4x4 矩阵 X_cam2gripper（相机在末端 TCP / gripper 坐标系下的变换）
     T_cam2gripper = np.eye(4)
     T_cam2gripper[0:3, 0:3] = R_cam2gripper
     T_cam2gripper[0:3, 3] = t_cam2gripper.reshape(3)
 
-    # 计算 camera 在 base 坐标系下的参考位姿（以第一个 robot pose 为例）
-    T_base2gripper_0 = robot_poses[0]
-    T_gripper2cam = np.linalg.inv(T_cam2gripper)
-    T_base2cam_0 = T_base2gripper_0.dot(T_gripper2cam)
-
-    return T_cam2gripper, T_base2cam_0
+    # 返回相机到末端（TCP）变换矩阵
+    return T_cam2gripper
 
 
 def save_transform_yaml(path: str, T: np.ndarray):
@@ -252,7 +248,7 @@ def main(config_path='config_lc.yaml', image_folder='lc_imgs', robot_poses_file=
     print('[Info] 执行手眼标定 (calibrateHandEye)')
     T_cam2gripper = hand_eye_calibration(robot_poses, R_target2cam, t_target2cam)
 
-    print('\nResult: T_cam2gripper (camera -> gripper)')
+    print('\nResult: T_cam2gripper (camera -> gripper / TCP)')
     print(T_cam2gripper)
 
     # 保存结果
