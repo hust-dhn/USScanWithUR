@@ -48,12 +48,14 @@ _dual_camera = None
 thread_display = None
 thread_robot = None
 thread_keyboard = None
+thread_freedrive = None
 
 # 线程间通信
 start_scan_event = threading.Event()    # 开始扫描的事件
 stop_scan_event = threading.Event()     # 停止扫描的事件
 display_stop_event = threading.Event()  # 停止显示线程的事件
 robot_stop_event = threading.Event()    # 停止机器人线程的事件
+freedrive_event = threading.Event()     # 自由拖动模式启用标志
 
 # 扫描控制
 FRAMES_PER_POSE = 3  # 每个位姿保存的帧数（每个位姿拍3张，且每张对应一行位姿）
@@ -354,36 +356,124 @@ def thread_display_live_view():
         display_stop_event.set()
 
 
+def thread_freedrive_control():
+    """
+    线程：根据 freedrive_event 控制机器人的 Freedrive 模式（按 'd' 切换）
+    """
+    print("[Thread-Freedrive] 自由拖动线程已启动")
+    while not stop_scan_event.is_set():
+        try:
+            if freedrive_event.is_set():
+                # 开启 Freedrive 模式
+                try:
+                    rtde_c.freedriveMode([1,1,1,1,1,1], [1,1,1,0.5,0.5,0.5])
+                except Exception as e:
+                    print(f"[Thread-Freedrive] 启动 Freedrive 失败: {e}")
+            else:
+                # 如果之前处于 Freedrive 状态，尝试结束
+                try:
+                    rtde_c.endFreedriveMode()
+                except Exception:
+                    pass
+            time.sleep(0.1)
+        except Exception as e:
+            print(f"[Thread-Freedrive] 错误: {e}")
+            time.sleep(0.5)
+
+    # 退出前确保结束 Freedrive
+    try:
+        rtde_c.endFreedriveMode()
+    except Exception:
+        pass
+    print("[Thread-Freedrive] 自由拖动线程已停止")
+
+
 def thread_keyboard_control():
     """
-    线程2：监听键盘，按 's' 开始扫描，按 'q' 退出
+    线程：监听键盘，按 'd' 进入自由拖动，按 'f' 拍照并记录当前位姿，按 'q' 退出
     """
+    global freedrive_event
     print("[Thread-Keyboard] 键盘监听线程已启动")
-    print("[Thread-Keyboard] 按 's' 开始扫描，按 'q' 退出")
-    
+    print("[Thread-Keyboard] 按 'd' 自由拖动，按 'f' 拍照并记录位姿，按 'q' 退出")
+
     def on_press(key):
         try:
-            # 按下 's' 键开始扫描
-            if hasattr(key, 'char') and key.char == 's':
+            if hasattr(key, 'char') and key.char == 'd':
+                # 切换 freedrive 模式
+                if not freedrive_event.is_set():
+                    print("[Thread-Keyboard] 进入自由拖动模式")
+                    freedrive_event.set()
+                else:
+                    print("[Thread-Keyboard] 退出自由拖动模式")
+                    freedrive_event.clear()
+
+            # 按 's' 开始扫描（与旧逻辑保持兼容）
+            elif hasattr(key, 'char') and key.char == 's':
                 print(f"\n[Thread-Keyboard] 用户按下 's'，开始扫描")
                 start_scan_event.set()
-            
-            # 按下 'q' 键退出
+
+            elif hasattr(key, 'char') and key.char == 'f':
+                # 连续拍摄 FRAMES_PER_POSE 张并记录对应位姿
+                print(f"[Thread-Keyboard] 捕获并记录 {FRAMES_PER_POSE} 帧 (f)")
+                try:
+                    for i in range(FRAMES_PER_POSE):
+                        # 获取帧
+                        frame1, frame2 = _dual_camera.get_frames()
+                        if frame1 is None or frame2 is None:
+                            print(f"[Thread-Keyboard] 第 {i+1} 帧获取失败")
+                            continue
+
+                        # 生成唯一文件名：时间戳 + 序号
+                        ts = int(time.time() * 1000)
+                        lc_filename = f"{LC_IMG_DIR}/{ts}_{i}{IMG_FORMAT}"
+                        rc_filename = f"{RC_IMG_DIR}/{ts}_{i}{IMG_FORMAT}"
+
+                        try:
+                            img_l = np.array(frame1.buffer, dtype=np.uint8).reshape(frame1.height, frame1.width, 4)
+                            img_r = np.array(frame2.buffer, dtype=np.uint8).reshape(frame2.height, frame2.width, 4)
+                            cv2.imwrite(lc_filename, img_l)
+                            cv2.imwrite(rc_filename, img_r)
+                            print(f"[Thread-Keyboard] 已保存图片: {lc_filename}, {rc_filename}")
+                        except Exception as ex:
+                            print(f"[Thread-Keyboard] 保存图片失败: {ex}")
+                            continue
+
+                        # 记录当前机器人位姿（每张图片一条）
+                        try:
+                            current_pose = rtde_r.getActualTCPPose()
+                            pose_matrix_actual = pose_6d_to_4x4(current_pose)
+                            robot_poses.append(pose_matrix_actual)
+                            print(f"[Thread-Keyboard] 已记录位姿 {len(robot_poses)}: {[f'{x:.4f}' for x in current_pose]}")
+                        except Exception as ex:
+                            print(f"[Thread-Keyboard] 记录位姿失败: {ex}")
+
+                        # 小延时，与自动采集行为一致
+                        time.sleep(0.1)
+
+                    # 每次拍摄后保存位姿文件（覆盖式保存，保持顺序）
+                    try:
+                        save_robot_poses_to_file(robot_poses)
+                    except Exception as ex:
+                        print(f"[Thread-Keyboard] 保存位姿文件失败: {ex}")
+
+                except Exception as e:
+                    print(f"[Thread-Keyboard] 捕获或保存过程出错: {e}")
+
             elif hasattr(key, 'char') and key.char == 'q':
-                print(f"\n[Thread-Keyboard] 用户按下 'q'，停止扫描")
+                print("[Thread-Keyboard] 用户按下 'q'，退出程序")
                 stop_scan_event.set()
                 display_stop_event.set()
+                freedrive_event.clear()
                 return False
-        
+
         except AttributeError:
             pass
-    
+
     try:
         with keyboard.Listener(on_press=on_press) as listener:
             while not stop_scan_event.is_set():
                 time.sleep(0.1)
             listener.stop()
-    
     except Exception as e:
         print(f"[Thread-Keyboard] 错误: {e}")
     finally:
@@ -395,7 +485,7 @@ def automatic_scan_with_threads():
     """
     自动扫描：移动机器人到55个位姿，在每个位姿自动拍摄10张照片
     """
-    global thread_display, thread_keyboard
+    global thread_display, thread_keyboard, thread_freedrive
     
     print("\n" + "="*50)
     print("自动扫描过程（多线程）")
@@ -413,6 +503,10 @@ def automatic_scan_with_threads():
         # 启动键盘监听线程
         thread_keyboard = threading.Thread(target=thread_keyboard_control, daemon=True)
         thread_keyboard.start()
+
+        # 启动自由拖动控制线程
+        thread_freedrive = threading.Thread(target=thread_freedrive_control, daemon=True)
+        thread_freedrive.start()
         
         print("[Main] 等待用户按 's' 键开始扫描...")
         
@@ -536,6 +630,10 @@ def automatic_scan_with_threads():
             thread_display.join(timeout=5)
         if thread_keyboard and thread_keyboard.is_alive():
             thread_keyboard.join(timeout=5)
+        if thread_freedrive and thread_freedrive.is_alive():
+            # 通知 freedrive 线程退出并等待
+            freedrive_event.clear()
+            thread_freedrive.join(timeout=5)
         
         print("[Main] 所有线程已停止")
 
