@@ -21,7 +21,6 @@ sensor_cog = [0.034, 0.004, 0.069]  # 质心位置，单位：米
 robot_ip = "192.168.253.101"
 
 # 相机参数（不再使用 OpenCV VideoCapture）
-# 保留图像尺寸常量用于保存/处理（可按需修改）
 IMG_WIDTH = 1600
 IMG_HEIGHT = 1200
 
@@ -87,6 +86,21 @@ def initialize_cameras():
         # 使用 DualCamera 类进行初始化
         _dual_camera = DualCamera(lc_imgs_path=LC_IMG_DIR, rc_imgs_path=RC_IMG_DIR, clear_on_init=False)
         ok = _dual_camera.initialize()
+        
+        if hasattr(_dual_camera.channels_size1, 'items'):
+            print("camera1各通道的图像尺寸:")
+            for channel_id, size in _dual_camera.channels_size1.items():
+                print(f"  通道 {channel_id}: {size}")
+                data1 = _dual_camera.sensor1.get_calibration_data()
+                print(f"[Camera] Left Camera Calibration Data: {data1}")
+        
+        if hasattr(_dual_camera.channels_size2, 'items'):
+            print("camera2各通道的图像尺寸:")
+            for channel_id, size in _dual_camera.channels_size2.items():
+                print(f"  通道 {channel_id}: {size}")
+                data2 = _dual_camera.sensor2.get_calibration_data()
+                print(f"[Camera] Right Camera Calibration Data: {data2}")
+
         if not ok:
             print("[Error] DualCamera 初始化失败")
             return False
@@ -118,7 +132,6 @@ def create_image_directories():
 def generate_random_poses(num_poses=55):
     """
     生成55个随机的4x4变换矩阵位姿
-    实际应用中可以根据需求修改这个函数
     
     :param num_poses: 位姿个数
     :return: 位姿列表，每个位姿是4x4的变换矩阵
@@ -201,7 +214,7 @@ def pose_6d_to_4x4(pose_6d):
 
 def pose_4x4_to_6d(pose_matrix):
     """
-    将4x4矩阵转换回6D位姿（如需要）
+    将4x4矩阵转换回6D位姿
     
     :param pose_matrix: 4x4变换矩阵（16元素列表）
     :return: 6D位姿 [x, y, z, rx, ry, rz]
@@ -657,9 +670,10 @@ def main():
     except KeyboardInterrupt:
         print("\n[Info] 用户中断")
         quit_flag = True
-        display_stop_event.set()
+        
         robot_stop_event.set()
         stop_scan_event.set()
+        display_stop_event.set()
         return False
     except Exception as e:
         print(f"[Error] 程序出错: {e}")

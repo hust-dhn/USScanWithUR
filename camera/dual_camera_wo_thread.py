@@ -37,6 +37,9 @@ class DualCamera:
         # 帧计数器
         self.frame_counter1 = 0
         self.frame_counter2 = 0
+
+        self.channels_size1 = None
+        self.channels_size2 = None
         
         # 是否初始化
         self.is_initialized = False
@@ -125,8 +128,8 @@ class DualCamera:
             print(f"[Init] Sensor 2 initialized: {type(hw_information2)}")
             
             # 启动传感器
-            channels_size1 = self.sensor1.start(None, dpe_params1)
-            channels_size2 = self.sensor2.start(None, dpe_params2)
+            self.channels_size1 = self.sensor1.start(None, dpe_params1)
+            self.channels_size2 = self.sensor2.start(None, dpe_params2)
                     
             # 注册传感器回调
             self.sensor1.register = self._sensor_callback_func1
