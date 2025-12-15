@@ -7,10 +7,22 @@ from typing import List, Tuple
 
 
 # ===== User-configurable defaults (modify paths here if files move) =====
-DEFAULT_CONFIG_PATH = 'camera/config_lc.yaml'
-DEFAULT_IMAGE_FOLDER = 'camera/lc_imgs/'
-DEFAULT_ROBOT_POSES_FILE = 'camera/robot_pos.txt'
-DEFAULT_OUTPUT_DIR = 'camera/calib_output/'
+BOOL_LC = False  # True for left camera, False for right camera
+
+# LEFT
+if BOOL_LC:
+    DEFAULT_CONFIG_PATH = 'camera/config_lc.yaml'
+    DEFAULT_IMAGE_FOLDER = 'camera/lc_imgs/'
+    DEFAULT_OUTPUT_DIR = 'camera/calib_output/'
+    DEFAULT_OUTPUT_INTRINSICS_FILE = 'intrinsics_lc.yaml'
+    DEFAULT_ROBOT_POSES_FILE = 'camera/robot_pos.txt'
+# RIGHT
+else:
+    DEFAULT_CONFIG_PATH = 'camera/config_rc.yaml'
+    DEFAULT_IMAGE_FOLDER = 'camera/rc_imgs/'
+    DEFAULT_OUTPUT_DIR = 'camera/calib_output/'
+    DEFAULT_OUTPUT_INTRINSICS_FILE = 'intrinsics_rc.yaml'
+    DEFAULT_ROBOT_POSES_FILE = 'camera/robot_pos.txt'
 # ======================================================================
 
 

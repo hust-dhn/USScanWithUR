@@ -6,6 +6,7 @@
 
 SDK_CAMERA/*
 linux_x86/*
+camera/calib_output/*
 
 
 # 忽略所有 __pycache__ 文件夹

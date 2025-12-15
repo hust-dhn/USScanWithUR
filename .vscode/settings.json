@@ -12,5 +12,6 @@
         "/opt/ros/humble/local/lib/python3.10/dist-packages",
         "",
         "/home/zzz/zzz_ws/src/DeformableAffordance-main/PyFlex"
-    ]
+    ],
+    "ros.distro": "humble"
 }
