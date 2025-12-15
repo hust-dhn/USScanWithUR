@@ -47,70 +47,105 @@ def load_robot_poses(robot_poses_path: str) -> List[np.ndarray]:
     return poses
 
 
-def generate_object_points(chessboard_size: Tuple[int, int], square_size: float) -> np.ndarray:
-    """生成单张棋盘格的物理角点（3D）"""
-    objp = np.zeros((chessboard_size[0] * chessboard_size[1], 3), np.float32)
-    objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2)
-    objp *= square_size
-    return objp
+def create_aruco_board(board_config: dict):
+    """创建ArUco板对象"""
+    dictionary_name = board_config['dictionary']
+    marker_length = board_config['marker_length']
+    board_size = board_config['board_size']
+    square_size = board_config['square_size']
+    
+    # 获取字典
+    aruco_dict = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dictionary_name))
+    
+    # 创建板子
+    board = cv2.aruco.GridBoard((board_size[1], board_size[0]), marker_length, square_size, aruco_dict)
+    return board, aruco_dict
 
 
-def detect_chessboards(image_folder: str, chessboard_size: Tuple[int, int], square_size: float):
+def detect_aruco_board(image_folder: str, board_config: dict):
     """
-    在指定文件夹中检测棋盘角点。
-    返回：image_paths_used, image_points(list of Nx1x2), object_points(list of NxM)
+    在指定文件夹中检测ArUco板。
+    返回：used_paths, R_target2cam_list, t_target2cam_list, object_points_list, image_points_list
     """
-    # 列出所有文件并按文件名中的数字索引排序，保证与拍照时的数值索引一一对应
+    board, aruco_dict = create_aruco_board(board_config)
+    
+    # 列出所有文件并按文件名中的数字索引排序
     all_paths = glob.glob(os.path.join(image_folder, '*'))
     def extract_index(p):
         name = os.path.basename(p)
-        # 提取文件名中的连续数字作为索引（例如 '12.jpg' -> 12），找不到则返回 large number
         import re
         m = re.search(r"(\d+)", name)
         if m:
             return int(m.group(1))
         return 10**9
     image_paths = sorted(all_paths, key=extract_index)
-    image_points = []
-    object_points = []
+    
     used_paths = []
-
-    objp = generate_object_points(chessboard_size, square_size)
-
+    R_target2cam_list = []
+    t_target2cam_list = []
+    object_points_list = []
+    image_points_list = []
+    
     for p in image_paths:
         img = cv2.imread(p)
         if img is None:
             continue
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        ret, corners = cv2.findChessboardCorners(gray, chessboard_size, None)
-        if ret:
-            term = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-            cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), term)
-            image_points.append(corners)
-            object_points.append(objp)
-            used_paths.append(p)
+        
+        # 检测markers
+        corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict)
+        if ids is not None and len(ids) > 0:
+            # 估计板子姿态
+            ret, rvec, tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, 
+                                                         np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64), 
+                                                         np.zeros(5), None, None)
+            if ret > 0:
+                R, _ = cv2.Rodrigues(rvec)
+                R_target2cam_list.append(R)
+                t_target2cam_list.append(tvec.reshape(3))
+                used_paths.append(p)
+                
+                # 为内参标定收集object points和image points
+                obj_points, img_points = board.matchImagePoints(corners, ids)
+                if obj_points is not None and img_points is not None:
+                    object_points_list.append(obj_points)
+                    image_points_list.append(img_points)
+            else:
+                print(f"Warning: ArUco board pose estimation failed in {p}")
         else:
-            print(f"Warning: chessboard not found in {p}")
-
-    return used_paths, image_points, object_points
-
-
-def visualize_chessboard_detection(image_folder: str, used_paths: List[str], image_points: List[np.ndarray],
-                                   chessboard_size: Tuple[int, int], output_folder: str):
-    """
-    可视化棋盘格检测结果，在检测到的图片上绘制角点，保存标注图到输出文件夹
-    """
-    os.makedirs(output_folder, exist_ok=True)
-    print(f'[Info] 保存棋盘格检测结果到 {output_folder}...')
+            print(f"Warning: No ArUco markers found in {p}")
     
-    for i, (p, corners) in enumerate(zip(used_paths, image_points)):
+    return used_paths, R_target2cam_list, t_target2cam_list, object_points_list, image_points_list
+
+
+def visualize_aruco_detection(image_folder: str, used_paths: List[str], board_config: dict, output_folder: str):
+    """
+    可视化ArUco板检测结果，在检测到的图片上绘制markers，保存标注图到输出文件夹
+    """
+    board, aruco_dict = create_aruco_board(board_config)
+    
+    os.makedirs(output_folder, exist_ok=True)
+    print(f'[Info] 保存ArUco检测结果到 {output_folder}...')
+    
+    for p in used_paths:
         img = cv2.imread(p)
         if img is None:
             continue
         
-        # 在图上绘制检测到的棋盘角点
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict)
+        
+        # 绘制检测到的markers
         vis = img.copy()
-        cv2.drawChessboardCorners(vis, chessboard_size, corners, True)
+        if ids is not None:
+            cv2.aruco.drawDetectedMarkers(vis, corners, ids)
+            
+            # 如果能估计姿态，也绘制轴
+            ret, rvec, tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, 
+                                                         np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64), 
+                                                         np.zeros(5), None, None)
+            if ret > 0:
+                cv2.drawFrameAxes(vis, np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64), np.zeros(5), rvec, tvec, 0.05)
         
         # 保存标注图
         fname = os.path.basename(p)
@@ -200,19 +235,21 @@ def save_transform_yaml(path: str, T: np.ndarray):
 def main(config_path='config_lc.yaml', image_folder='lc_imgs', robot_poses_file='robot_pos.txt'):
     # 读取配置
     config = load_config(config_path)
-    chessboard = config['chessboard']
-    cb_size = tuple(chessboard['size'])
-    square_size = chessboard['square_size']
+    board_config = config['calibration_board']
+    board_type = board_config['type']
+    
+    if board_type != 'aruco':
+        raise ValueError(f"Unsupported board type: {board_type}. Only 'aruco' is supported.")
 
-    # 检测棋盘角点
-    print(f"Detecting chessboards in {image_folder}...")
-    used_paths, image_points, object_points = detect_chessboards(image_folder, cb_size, square_size)
-    if len(image_points) == 0:
-        print('No chessboards found. Abort')
+    # 检测ArUco板
+    print(f"Detecting ArUco board in {image_folder}...")
+    used_paths, R_target2cam_list, t_target2cam_list, object_points_list, image_points_list = detect_aruco_board(image_folder, board_config)
+    if len(R_target2cam_list) == 0:
+        print('No ArUco boards found. Abort')
         return
     
     # 可视化检测结果
-    visualize_chessboard_detection(image_folder, used_paths, image_points, cb_size, DEFAULT_OUTPUT_DIR)
+    visualize_aruco_detection(image_folder, used_paths, board_config, DEFAULT_OUTPUT_DIR)
 
     # 尝试从配置读取内参，如果没有或为占位值则标定内参
     cam_cfg = config.get('camera', {})
@@ -230,19 +267,17 @@ def main(config_path='config_lc.yaml', image_folder='lc_imgs', robot_poses_file=
         have_intrinsics = False
 
     # 如果没有内参，执行相机标定
-    sample_img = cv2.imread(used_paths[0])
-    image_size = (sample_img.shape[1], sample_img.shape[0])
-    if not have_intrinsics:
+    if not have_intrinsics and len(object_points_list) > 0:
+        sample_img = cv2.imread(used_paths[0])
+        image_size = (sample_img.shape[1], sample_img.shape[0])
         print('[Info] 标定相机内参...')
-        camera_matrix, dist_coeffs, _, _ = calibrate_intrinsics(object_points, image_points, image_size)
+        camera_matrix, dist_coeffs, _, _ = calibrate_intrinsics(object_points_list, image_points_list, image_size)
         print('Estimated camera matrix:')
         print(camera_matrix)
         print('Estimated dist coeffs:')
         print(dist_coeffs)
-
-    # 计算每张图片的外参（target -> cam）
-    print('[Info] 计算每张图片的外参（target->cam）')
-    R_target2cam, t_target2cam = compute_extrinsics_per_image(object_points, image_points, camera_matrix, dist_coeffs)
+    elif not have_intrinsics:
+        print('[Warning] No intrinsics available and no valid detections for calibration.')
 
     # 读取机器人位姿
     robot_poses = load_robot_poses(robot_poses_file)
@@ -251,14 +286,14 @@ def main(config_path='config_lc.yaml', image_folder='lc_imgs', robot_poses_file=
         return
 
     # 对齐样本数量
-    n = min(len(robot_poses), len(R_target2cam))
+    n = min(len(robot_poses), len(R_target2cam_list))
     robot_poses = robot_poses[:n]
-    R_target2cam = R_target2cam[:n]
-    t_target2cam = t_target2cam[:n]
+    R_target2cam_list = R_target2cam_list[:n]
+    t_target2cam_list = t_target2cam_list[:n]
 
     # 执行手眼标定
     print('[Info] 执行手眼标定 (calibrateHandEye)')
-    T_cam2gripper = hand_eye_calibration(robot_poses, R_target2cam, t_target2cam)
+    T_cam2gripper = hand_eye_calibration(robot_poses, R_target2cam_list, t_target2cam_list)
 
     print('\nResult: T_cam2gripper (camera -> gripper / TCP)')
     print(T_cam2gripper)
@@ -268,7 +303,7 @@ def main(config_path='config_lc.yaml', image_folder='lc_imgs', robot_poses_file=
     os.makedirs(out_dir, exist_ok=True)
     save_transform_yaml(os.path.join(out_dir, 'T_cam2gripper.yaml'), T_cam2gripper)
     print(f'[Info] 结果已保存到 {out_dir}')
-    print(f'[Info] 检测到 {len(used_paths)} 张有效的棋盘格图片')
+    print(f'[Info] 检测到 {len(used_paths)} 张有效的ArUco板图片')
 
 
 if __name__ == '__main__':
