@@ -48,7 +48,7 @@ def load_robot_poses(robot_poses_path: str) -> List[np.ndarray]:
 
 
 def create_aruco_board(board_config: dict):
-    """创建ArUco板对象"""
+    """创建ArUco板对象和检测器"""
     dictionary_name = board_config['dictionary']
     marker_length = board_config['marker_length']
     board_size = board_config['board_size']
@@ -57,9 +57,12 @@ def create_aruco_board(board_config: dict):
     # 获取字典
     aruco_dict = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dictionary_name))
     
+    # 创建检测器
+    detector = cv2.aruco.ArucoDetector(aruco_dict)
+    
     # 创建板子
     board = cv2.aruco.GridBoard((board_size[1], board_size[0]), marker_length, square_size, aruco_dict)
-    return board, aruco_dict
+    return board, detector
 
 
 def detect_aruco_board(image_folder: str, board_config: dict):
@@ -67,7 +70,7 @@ def detect_aruco_board(image_folder: str, board_config: dict):
     在指定文件夹中检测ArUco板。
     返回：used_paths, R_target2cam_list, t_target2cam_list, object_points_list, image_points_list
     """
-    board, aruco_dict = create_aruco_board(board_config)
+    board, detector = create_aruco_board(board_config)
     
     # 列出所有文件并按文件名中的数字索引排序
     all_paths = glob.glob(os.path.join(image_folder, '*'))
@@ -93,7 +96,7 @@ def detect_aruco_board(image_folder: str, board_config: dict):
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
         # 检测markers
-        corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict)
+        corners, ids, rejected = detector.detectMarkers(gray)
         if ids is not None and len(ids) > 0:
             # 估计板子姿态
             ret, rvec, tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, 
@@ -122,7 +125,7 @@ def visualize_aruco_detection(image_folder: str, used_paths: List[str], board_co
     """
     可视化ArUco板检测结果，在检测到的图片上绘制markers，保存标注图到输出文件夹
     """
-    board, aruco_dict = create_aruco_board(board_config)
+    board, detector = create_aruco_board(board_config)
     
     os.makedirs(output_folder, exist_ok=True)
     print(f'[Info] 保存ArUco检测结果到 {output_folder}...')
@@ -133,7 +136,7 @@ def visualize_aruco_detection(image_folder: str, used_paths: List[str], board_co
             continue
         
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict)
+        corners, ids, rejected = detector.detectMarkers(gray)
         
         # 绘制检测到的markers
         vis = img.copy()
