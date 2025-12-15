@@ -1,6 +1,7 @@
 # 本文目录：
 ## 如何解决 SOCKS 相关问题
 ## 重新安装驱动
+## 设置双相机模组
 ## github 快速 git pull
 
 # Helper: 如何解决 SOCKS 相关问题
@@ -21,6 +22,29 @@
 ## 步骤：
 cd /home/zzz/ros2_ws/src/my_ur10e_control/camera/linux_x86
 sudo dpkg -i inudev_4.36.0008.02-1_amd64.deb
+
+# Helper: 设置双相机模组
+## 步骤：
+### 打开opt下的解压文件
+cd /opt/
+cd /opt/inuitive
+cd /opt/inuitive/InDev/
+### 复制两份InuService
+cd ../bin/       
+sudo cp -r InuService InuService1
+sudo cp -r InuService InuService2
+### 复制两份InuServiceParams.xml
+cd ../config/
+sudo cp -r InuServiceParams.xml InuService1Params.xml
+sudo cp -r InuServiceParams.xml InuService2Params.xml
+### 分别编辑InuService1Params.xml与InuService2Params.xml
+sudo vi InuService1Params.xml       //将第一行的InuServiceParams与最后一行的InuServiceParams改为InuService1Params，保存后退出
+sudo vi InuService2Params.xml       //将第一行的InuServiceParams与最后一行的InuServiceParams改为InuService2Params，保存后退出
+### 检查USB接口是否识别两个相机
+lsusb/lsusb -t
+### 上述步骤完成后打开两个终端分别输入
+sudo ./InuService1 console 1
+sudo ./InuService2 console 2         //若均显示Module is ready to work，则说明模组正确连接
 
 # Helper: github 快速 git pull
 ## 步骤：
