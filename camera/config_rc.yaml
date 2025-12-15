@@ -8,6 +8,9 @@ camera:
     cy: 601.070680628272271 # 主点 cy
   distortion_coeffs: [0.00000, 0.00000, 0.00000, 0.00000, 0.00000]  # 畸变系数（假设无畸变）
 
-chessboard:
-  size: [20, 20]  # 棋盘格行列数
-  square_size: 0.01  # 每个格子的物理尺寸（单位：米）
+calibration_board:
+  type: 'aruco'  # 标定板类型：'aruco' 或 'circle_grid'
+  dictionary: 'DICT_4X4_50'  # ArUco字典类型
+  marker_length: 0.0211875  # 每个ArUco标记的边长（单位：米）
+  board_size: [8, 4]  # 板子上的标记排列：[行数, 列数]
+  square_size: 0.02825  # 标记之间的距离（单位：米，从标记中心到中心）
