@@ -5,7 +5,12 @@ UR10e机器人运动学
 
 import math          # 数学运算库，用于三角函数等数学操作
 import numpy as np   # 数值计算库，用于矩阵运算和数组操作
+<<<<<<< HEAD
 
+=======
+import rospy         # ROS通信库，用于机器人操作系统通信
+from std_msgs.msg import Float32MultiArray  # ROS消息类型，用于传输浮点数数组
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
 
 # 定义UR10eKine类，实现UR10e机器人的运动学功能
 class UR10eKine:
@@ -19,14 +24,41 @@ class UR10eKine:
         # 左右臂UR10e模式配置
         self.left_ur_mode = left_ur_mode    # 布尔值，表示是否使用左臂模式，默认True
         self.right_ur_mode = not self.left_ur_mode  # 布尔值，表示是否使用右臂模式，与左臂相反
+<<<<<<< HEAD
         
 
     
+=======
+        self.joint_pub = None               # ROS发布器对象，初始化为空
+        self.ros_pub()                      # 调用方法初始化ROS发布器
+
+        # 运动学计算相关参数
+        self.ik_iteration = 20              # 逆运动学求解的迭代次数
+        self.motion_steps = 500             # 直线运动插补时的分段步数
+        self.speed_factor = 0.5             # 运动速度系数
+        
+    def ros_pub(self):
+        # 初始化ROS节点和发布器
+        if self.left_ur_mode:
+            # 如果是左臂模式，创建名为'left_ur10e_kine'的ROS节点
+            rospy.init_node('left_ur10e_kine', anonymous=True)
+            # 创建发布器，发布到'left_joints_angle'话题，消息类型为Float32MultiArray
+            self.joint_pub = rospy.Publisher('left_joints_angle', Float32MultiArray, queue_size=10)
+        else:
+            # 如果是右臂模式，创建名为'right_ur10e_kine'的ROS节点
+            rospy.init_node('right_ur10e_kine', anonymous=True)
+            # 创建发布器，发布到'right_joints_angle'话题
+            self.joint_pub = rospy.Publisher('right_joints_angle', Float32MultiArray, queue_size=10)
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
 
     def THT(self, Theta, A, D, Alpha):
         # 计算DH参数下的齐次变换矩阵
         # Theta: 关节角度，A: 连杆长度，D: 连杆偏距，Alpha: 连杆扭转角
+<<<<<<< HEAD
         T = np.asmatrix((
+=======
+        T = np.mat((
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
             # 第一行：[cos(θ), -sin(θ)*cos(α), sin(α)*sin(θ), a*cos(θ)]
             [math.cos(Theta), -math.sin(Theta)*math.cos(Alpha), math.sin(Alpha)*math.sin(Theta), A*math.cos(Theta)],
             # 第二行：[sin(θ), cos(θ)*cos(α), -cos(θ)*sin(α), a*sin(θ)]
@@ -174,7 +206,11 @@ class UR10eKine:
         a8 = [t1[7], t2[7], t3[7], t4[7], t5[7], t6[7]]  # 第八组解
 
         # 将所有解组织成矩阵
+<<<<<<< HEAD
         solution = np.asmatrix((a1,a2,a3,a4,a5,a6,a7,a8))
+=======
+        solution = np.mat((a1,a2,a3,a4,a5,a6,a7,a8))
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
         
         # 找到与当前关节角度最接近的解
         closest_index = np.argmin(np.linalg.norm(solution - np.tile(curr_theta, (8,1)), axis=1))
@@ -353,7 +389,14 @@ class UR10eKine:
      return [x, y, z, rpy[0], rpy[1], rpy[2]]
 
     
+<<<<<<< HEAD
    
+=======
+    def set_ik_iteration(self, iteration: int):
+        # 设置逆运动学迭代次数
+        self.ik_iteration = iteration  # 更新迭代次数
+        print("逆运动学迭代次数设置为:", iteration)  # 打印确认信息
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
 
 
 if __name__ == "__main__":
@@ -370,7 +413,11 @@ if __name__ == "__main__":
     
     # 定义测试位置姿态
     XYZRPY = [647.9652874124298, -67.64341007055711, 166.16671027057987, -3.141592653589793, 0, 3.141592653589793]
+<<<<<<< HEAD
     print("XYZRPY: ", XYZRPY)  # 打印测试位置姿态
+=======
+    print("XPZRPY: ", XYZRPY)  # 打印测试位置姿态
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
     
     # 将位置姿态转换为齐次变换矩阵
     T = ur10eKine.XYZrpy_to_Tmatrix(XYZRPY)
@@ -379,7 +426,11 @@ if __name__ == "__main__":
     
     print("测试逆运动学:")  # 打印提示信息
     IK_result = ur10eKine.IK(T, theta)
+<<<<<<< HEAD
     print("1:",IK_result)
+=======
+    print(IK_result)
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
 
     
     print("测试逆运动学得到的正运动学结果:")  # 打印提示信息
@@ -387,7 +438,11 @@ if __name__ == "__main__":
     print(FK_result)
     print("转为RPY是:")  # 打印提示信息
     FK_result_rpy = ur10eKine.Tmatrix_to_XYZrpy(FK_result)
+<<<<<<< HEAD
     print("2:",FK_result_rpy)
+=======
+    print(FK_result_rpy)
+>>>>>>> 9262b4f14817ac8e9d445ca81c2fd4d183d7b2d8
 
     rpy = [0, 0, math.pi]  # 绕Z轴转180度
     rotvec = ur10eKine.rpy_to_rotvec(rpy)
