@@ -43,7 +43,6 @@ robot_poses = []  # 存储所有的4x4变换矩阵
 
 # DualCamera 实例（在 initialize_cameras 中创建）
 _dual_camera = None
-CLEAR_IMG_BOOL = False  # 初始化时清空图像文件夹
 
 # 多线程相关
 thread_display = None
@@ -87,7 +86,7 @@ def initialize_cameras():
     global left_camera, right_camera, _dual_camera
     try:
         # 使用 DualCamera 类进行初始化
-        _dual_camera = DualCamera(lc_imgs_path=LC_IMG_DIR, rc_imgs_path=RC_IMG_DIR, clear_on_init=CLEAR_IMG_BOOL)
+        _dual_camera = DualCamera(lc_imgs_path=LC_IMG_DIR, rc_imgs_path=RC_IMG_DIR, clear_on_init=False)
         ok = _dual_camera.initialize()
         
         if hasattr(_dual_camera.channels_size1, 'items'):
