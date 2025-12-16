@@ -103,9 +103,14 @@ git fetch intranet
 git branch -vv
 ### 如果你工作分支是 master（你刚才推的是 master），直接把 upstream 指向内网：
 git branch --set-upstream-to=intranet/master master
-### 以后拉取和推送只需
-git pull intranet
+### 拉取和推送本地仓库只需
 git fetch intranet
+git pull intranet
+git push intranet
+### 拉取和推送github仓库
+git fetch origin
+git pull origin
+git push origin
 ### 免密（推荐）
 ssh-keygen -t ed25519
 ssh-copy-id zzz@14.0.1.49
