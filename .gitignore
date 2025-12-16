@@ -7,7 +7,6 @@
 
 SDK_CAMERA/*
 linux_x86/*
-camera/calib_output/*
 camera/rc_imgs/*
 camera/lc_imgs/*
 
