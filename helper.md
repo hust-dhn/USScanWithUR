@@ -3,6 +3,8 @@
 ## 重新安装驱动
 ## 设置双相机模组
 ## github 快速 git pull
+## 本地.git仓库使用
+## 访问zzz服务器电脑（不用删除github关联的分支）
 
 # Helper: 如何解决 SOCKS 相关问题
 ## 背景说明
@@ -55,6 +57,58 @@ git remote prune origin
 ### 快速拉取最新代码
 git fetch origin   // 或者如下
 git pull
+
+# Helper: 本地.git仓库使用
+## 步骤：
+### 先确认你至少能到达这台主机（是否真的通）
+ping -c 3 14.0.1.49
+### 再做一次路由确认（看有没有走奇怪的网关/VPN）：
+ip route get 14.0.1.49
+### 确认本机有ssh客户端
+sudo apt update
+sudo apt install -y openssh-server
+sudo systemctl enable --now ssh
+### 检查
+sudo ss -tlnp | grep ssh
+看到 LISTEN 0 128 0.0.0.0:22 就成功了。
+### 用“正确格式”的用户名
+ssh zzz@14.0.1.49
+### 创建裸仓库
+mkdir -p ~/git-repos
+cd ~/git-repos
+git init --bare my_ur10e_control.git
+### 检查
+ls -la ~/git-repos/my_ur10e_control.git
+### 本地仓库关联远程仓库并推送
+git remote add intranet zzz@14.0.1.49:~/git-repos/my_ur10e_control.git
+git push -u intranet --all
+git push intranet --tags
+### 验证
+git remote -v
+### 设置免密登录（可选，但推荐）
+ssh-keygen -t ed25519
+ssh-copy-id zzz@14.0.1.49
+### 以后拉取和推送只需
+git pull intranet
+git push intranet
+
+# Helper: 访问zzz服务器电脑（不用删除github关联的分支）
+## 步骤：
+### 如果先前没有克隆仓库（以后相当于只走内网）
+git clone zzz@14.0.1.49:~/git-repos/my_ur10e_control.git
+### 如果已经克隆过仓库
+git remote -v
+git remote add intranet zzz@14.0.1.49:~/git-repos/my_ur10e_control.git
+git fetch intranet
+git branch -vv
+### 如果你工作分支是 master（你刚才推的是 master），直接把 upstream 指向内网：
+git branch --set-upstream-to=intranet/master master
+### 以后拉取和推送只需
+git pull intranet
+git fetch intranet
+### 免密（推荐）
+ssh-keygen -t ed25519
+ssh-copy-id zzz@14.0.1.49
 
 # Helper: xxxx
 
