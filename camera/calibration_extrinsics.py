@@ -12,10 +12,10 @@ BOOL_LC = True  # True for left camera, False for right camera
 # LEFT
 if BOOL_LC:
     DEFAULT_CONFIG_PATH = 'camera/config_lc.yaml'
-    DEFAULT_IMAGE_FOLDER = 'camera/lc_imgs/'
+    DEFAULT_IMAGE_FOLDER = 'camera/lc_imgs_1/'
     DEFAULT_OUTPUT_DIR = 'camera/calib_output/'
     DEFAULT_OUTPUT_INTRINSICS_FILE = 'intrinsics_lc.yaml'
-    DEFAULT_ROBOT_POSES_FILE = 'camera/robot_pos.txt'
+    DEFAULT_ROBOT_POSES_FILE = 'camera/robot_pos_1.txt'
 # RIGHT
 else:
     DEFAULT_CONFIG_PATH = 'camera/config_rc.yaml'

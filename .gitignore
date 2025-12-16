@@ -3,6 +3,7 @@
 *.mp4
 *.deb
 *.tar.xz
+*.jpg
 
 SDK_CAMERA/*
 linux_x86/*
