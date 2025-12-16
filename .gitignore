@@ -3,12 +3,11 @@
 *.mp4
 *.deb
 *.tar.xz
-*.jpg
+
 
 SDK_CAMERA/*
 linux_x86/*
-camera/rc_imgs/*
-camera/lc_imgs/*
+
 
 
 # 忽略所有 __pycache__ 文件夹
