@@ -10,6 +10,13 @@ from api.hw_info import InterleaveMode, ChannelControlParams
 if sys.platform == 'linux':
     import signal
 
+import numpy as np
+import cv2
+
+right_imgs_path = "camera/stereo_imgs/rc_imgs/"
+left_imgs_path = "camera/stereo_imgs/lc_imgs/"
+frame_counter1 = 0
+
 # #########################################################  main #####################################################
 
 with_interlive = True
@@ -20,6 +27,7 @@ if __name__ == "__main__":
 
 
     def _print_frame(frame: ImageFrame) -> None:
+        global frame_counter1
         if frame is None:
             print('Invalid Stereo frame')
         else:
@@ -32,6 +40,17 @@ if __name__ == "__main__":
                 print(f"Left Frame: Format {frame.left_frame.format}, Height {frame.left_frame.height},"
                       f" Width{frame.left_frame.width}, BytesPerPixel {frame.left_frame.bytes_per_pixel}")
             print("\t------------------------------------------------------------------------------------------")
+            
+            depth_image_right = np.array(frame.right_frame.buffer, dtype=np.uint8).reshape(frame.right_frame.height, frame.right_frame.width, 4)
+            depth_image_left = np.array(frame.left_frame.buffer, dtype=np.uint8).reshape(frame.left_frame.height, frame.left_frame.width, 4)
+            image_filename_right = f"{right_imgs_path}{frame_counter1}_right.jpg"
+            image_filename_left = f"{left_imgs_path}{frame_counter1}_left.jpg"
+            cv2.imwrite(image_filename_right, depth_image_right)
+            print(f"[Camera 1] Saved frame {frame_counter1} as {image_filename_right}")
+            cv2.imwrite(image_filename_left, depth_image_left)
+            print(f"[Camera 1] Saved frame {frame_counter1} as {image_filename_left}")
+        frame_counter1 += 1
+
 
 
     def _stereo_callback_func(stream: StereoStream, frame: ImageFrame, error: Error) -> None:
@@ -44,7 +63,7 @@ if __name__ == "__main__":
 
 
     print(f"Start test application")
-    sensor = InuSensor()
+    sensor = InuSensor('1','')
     hw_information, dpe = sensor.init()
     stereo_channel = 0
     channel_control_params = ChannelControlParams(hw_information.channels[stereo_channel].ControlParams)

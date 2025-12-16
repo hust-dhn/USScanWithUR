@@ -189,6 +189,24 @@ def calibrate_intrinsics(object_points: List[np.ndarray], image_points: List[np.
     使用 cv2.calibrateCamera 估计相机内参和畸变。如果已有内参可跳过。
     返回 (camera_matrix, dist_coeffs, rvecs, tvecs)
     """
+    for i, op in enumerate(object_points):
+        if not isinstance(op, np.ndarray):
+            print("bad objectPoints type at", i, type(op))
+            break
+        print(i, "objectPoints shape:", op.shape, "dtype:", op.dtype)
+
+    for i, ip in enumerate(image_points):
+        if not isinstance(ip, np.ndarray):
+            print("bad imagePoints type at", i, type(ip))
+            break
+        print(i, "imagePoints shape:", ip.shape, "dtype:", ip.dtype)
+
+    object_points = [np.asarray(op, dtype=np.float32).reshape(-1, 1, 3)
+                        for op in object_points]
+    image_points  = [np.asarray(ip, dtype=np.float32).reshape(-1, 1, 2)
+                        for ip in image_points]
+
+    
     ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
         object_points, image_points, image_size, None, None
     )
