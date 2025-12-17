@@ -6,13 +6,17 @@ UR10e机器人运动学
 import math          # 数学运算库，用于三角函数等数学操作
 import numpy as np   # 数值计算库，用于矩阵运算和数组操作
 import time         # 时间库，用于时间相关操作
-try:
-    from ur_rtde import RTDEControlInterface as RTDEControl
-    from ur_rtde import RTDEReceiveInterface as RTDEReceive
-    RTDE_AVAILABLE = True
-except ImportError:
-    RTDE_AVAILABLE = False
-    print("Warning: 'ur-rtde' library not found. RTDE control will be disabled. Install it using 'pip install ur-rtde'.")
+
+import rtde_receive as RTDEReceive
+import rtde_control as RTDEControl
+
+# try:
+#     from ur_rtde import RTDEControlInterface as RTDEControl
+#     from ur_rtde import RTDEReceiveInterface as RTDEReceive
+#     RTDE_AVAILABLE = True
+# except ImportError:
+#     RTDE_AVAILABLE = False
+#     print("Warning: 'ur-rtde' library not found. RTDE control will be disabled. Install it using 'pip install ur-rtde'.")
 
 
 # 定义UR10eKine类，实现UR10e机器人的运动学功能
