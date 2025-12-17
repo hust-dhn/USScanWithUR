@@ -5,6 +5,7 @@
 ## github 快速 git pull
 ## 本地.git仓库使用
 ## 访问zzz服务器电脑（不用删除github关联的分支）
+## Helper: pip+清华源
 
 # Helper: 如何解决 SOCKS 相关问题
 ## 背景说明
@@ -115,5 +116,7 @@ git push origin
 ssh-keygen -t ed25519
 ssh-copy-id zzz@14.0.1.49
 
-# Helper: xxxx
+# Helper: pip+清华源
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple xxx
 
+# Helper: xxxx
