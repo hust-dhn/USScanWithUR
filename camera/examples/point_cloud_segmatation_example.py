@@ -62,7 +62,7 @@ if __name__ == "__main__":
     device_params = DeviceParams()
     device_params.fps = 5
     device_params.resolution = SensorResolution.BINNING
-    sensor, channels_size, hw_information = create_started_sensor(_sensor_callback_func, device_params)
+    sensor, channels_size, hw_information = create_started_sensor(_sensor_callback_func, device_params, '1','')
     print(f"{type(sensor)} initialization finished")
     params = SegmentationParams()
     stream = sensor.create_started_stream(StreamType.POINT_CLOUD, None, _point_cloud_callback_func, params)
