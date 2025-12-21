@@ -15,7 +15,7 @@
 ########################
 
 //The directory containing a CMake configuration file for Boost.
-Boost_DIR:PATH=/usr/lib/x86_64-linux-gnu/cmake/Boost-1.74.0
+Boost_DIR:PATH=Boost_DIR-NOTFOUND
 
 //Path to a file.
 Boost_INCLUDE_DIR:PATH=/usr/include
