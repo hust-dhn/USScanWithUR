@@ -12,7 +12,7 @@ import open3d.visualization.rendering as rendering
 # 配置区
 # ===========================
 
-PLY_PATH = r"/home/zzz/ros2_ws/src/my_ur10e_control/camera/pc_datas/0037.ply"
+PLY_PATH = r"/home/zzz/ros2_ws/src/my_ur10e_control/camera/pc_datas/0002.ply"
 
 PLY_DIR = r"/home/zzz/ros2_ws/src/my_ur10e_control/camera/examples"
 AUTO_PICK_LATEST_PLY = False
