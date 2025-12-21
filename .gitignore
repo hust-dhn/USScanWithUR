@@ -17,4 +17,4 @@ __pycache__/
 *.pyc
 
 # 忽略 .vscode 文件夹
-.vscode/
+.vscode/*

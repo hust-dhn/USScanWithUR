@@ -13,5 +13,6 @@
         "",
         "/home/zzz/zzz_ws/src/DeformableAffordance-main/PyFlex"
     ],
-    "ros.distro": "humble"
+    "ros.distro": "humble",
+    "cmake.sourceDirectory": "/home/zzz/ros2_ws/src/my_ur10e_control/registration"
 }
