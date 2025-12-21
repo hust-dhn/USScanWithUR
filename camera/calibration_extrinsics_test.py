@@ -218,12 +218,12 @@ def main(config_path='config_lc.yaml', image_folder='lc_imgs', robot_poses_file=
     cam_cfg = config.get('camera', {})
     have_intrinsics = False
     try:
-        fx = cam_cfg['matrix']['fx']
-        fy = cam_cfg['matrix']['fy']
-        cx = cam_cfg['matrix']['cx']
-        cy = cam_cfg['matrix']['cy']
+        fx = cam_cfg['sensor2']['matrix']['fx']
+        fy = cam_cfg['sensor2']['matrix']['fy']
+        cx = cam_cfg['sensor2']['matrix']['cx']
+        cy = cam_cfg['sensor2']['matrix']['cy']
         camera_matrix = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float64)
-        dist_coeffs = np.array(cam_cfg.get('distortion_coeffs', [0, 0, 0, 0, 0]), dtype=np.float64)
+        dist_coeffs = np.array(cam_cfg['sensor2']['distortion_coeffs'], dtype=np.float64)
         have_intrinsics = True
         print('[Info] 使用配置文件中的相机内参')
     except Exception:
