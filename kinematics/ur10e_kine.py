@@ -6,7 +6,7 @@ UR10e机器人运动学
 import math          # 数学运算库，用于三角函数等数学操作
 import numpy as np   # 数值计算库，用于矩阵运算和数组操作
 import time         # 时间库，用于时间相关操作
-import  rtde_controll   # RTDE控制库，用于与UR机器人通信和控制
+import  rtde_control   # RTDE控制库，用于与UR机器人通信和控制
 import  rtde_receive   # RTDE接收库，用于从UR机器人接收数据
 
 
@@ -19,7 +19,7 @@ class UR10eKine:
         self.d = [180.7, 0, 0, 174.15, 119.85, 116.55]  # 连杆偏距参数（mm）
         self.alpha = [math.pi/2, 0, 0, math.pi/2, -math.pi/2, 0]  # 连杆扭转角参数（弧度）
         self.robot_ip = "192.168.253.101"
-        self.rtde_c = rtde_controll.RTDEControlInterface(self.robot_ip)
+        self.rtde_c = rtde_control.RTDEControlInterface(self.robot_ip)
         self.rtde_r = rtde_receive.RTDEReceiveInterface(self.robot_ip)
 
 
@@ -363,21 +363,21 @@ def main():
     print("\nDifference (T - FK_result):\n", T - FK_result)
     print("Is close?", np.allclose(T, FK_result, atol=1e-6)) # 检查是否在误差范围内相等 pass
 
-    # --- RTDE Configuration ---
-    # --- Test 1: RTDE Control (Move to Pose) ---
-    print("\n--- Test 1: RTDE Control (Move to Pose) ---")
+    # RTDE Configuration
+    # Test 1: RTDE Control (Move to Pose)
+    print("\n Test 1: RTDE Control (Move to Pose)")
     pose_XYZrpy = [0.3829008765272479, -0.779356486672843, 0.3295970363725074, -2.045600586766512, 2.3108770523885713, -0.36196394363466333]
     pose_XYZRXRYRZ = ur10eKine.XYZrpy_to_XYZRXRYRZ(pose_XYZrpy)
     rtde_c.moveL(pose_XYZRXRYRZ, 0.5, 0.3)
     #替换为示教的XYZRXRYRZ位姿
 
-    # --- Test 2: RTDE Control (Move to Joint Angles) ---
-    print("\n--- Test 2: RTDE Control (Move to Joint Angles) ---")
+    # Test 2: RTDE Control (Move to Joint Angles)
+    print("\n Test 2: RTDE Control (Move to Joint Angles)")
     joint_q = [[-0.7369511763202112, -1.7268530331053675, -2.125002861022949, -0.6251672071269532, 1.5825108289718628, -0.6084545294391077]]
     rtde_c.moveJ(joint_q)
     # 替换为示教的关节角度
 
-    #----- 关节角速度，2ms一循环，总共2s------------------------------------------------------
+    # 关节角速度，2ms一循环，总共2s
     temp_time = time.time()
     for i in range(1000):
         t_start = rtde_c.initPeriod()
@@ -387,7 +387,7 @@ def main():
     print(f'SpeedJ用时：{time.time()-temp_time}')
     rtde_c.speedStop()                                       #速度控制结束一定注意stop
     
-    #----- 末端速度控制 ------------------------------------------------------------------
+    # 末端速度控制
     temp_time = time.time()
     for i in range(1500):
        t_start = rtde_c.initPeriod()
