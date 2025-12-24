@@ -11,11 +11,14 @@ import cv2
 import numpy as np
 from function.clear_files import delete_jpg_files
 
+# ===== 单相机配置 =====
+DEFAULT_IMAGE_FOLDER = 'camera/imgs/'          # 单相机图像文件夹
+DEFAULT_CLEAR_ON_INIT = True  # 初始化时是否清空已有图像文件
 
 class SingleCamera:
     """单相机封装类，用于超声扫描系统的图像采集"""
     
-    def __init__(self, imgs_path="camera/imgs/", clear_on_init=True, sensor_id=''):
+    def __init__(self, imgs_path=DEFAULT_IMAGE_FOLDER, clear_on_init=DEFAULT_CLEAR_ON_INIT, sensor_id=''):
         """
         初始化单相机类
         
@@ -297,8 +300,8 @@ if __name__ == "__main__":
     print("="*50)
     
     try:
-        with SingleCamera(imgs_path="camera/imgs/",
-                         clear_on_init=True) as camera:
+        with SingleCamera(imgs_path=DEFAULT_IMAGE_FOLDER,
+                         clear_on_init=DEFAULT_CLEAR_ON_INIT) as camera:
             # 采集5帧图像，每帧间隔0.5秒
             camera.capture_frames(num_frames=5, interval=0.5)
     
@@ -312,8 +315,8 @@ if __name__ == "__main__":
     print("方法2：手动初始化和关闭")
     print("="*50)
     
-    camera = SingleCamera(imgs_path="camera/imgs/",
-                         clear_on_init=False)
+    camera = SingleCamera(imgs_path=DEFAULT_IMAGE_FOLDER,
+                         clear_on_init=DEFAULT_CLEAR_ON_INIT)
     
     try:
         if camera.initialize():

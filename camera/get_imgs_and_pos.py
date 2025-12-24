@@ -27,7 +27,7 @@ IMG_HEIGHT = 1200
 # 图像和位姿存储参数
 NUM_POSES = 30  # 生成30个位姿（减少但增加多样性）
 IMG_DIR = "camera/imgs/"  # 单相机图像文件夹
-ROBOT_POS_FILE = "camera/robot_pos.txt"  # 机器人位姿文件
+ROBOT_POS_FILE = "camera/cfg/robot_pos.txt"  # 机器人位姿文件
 IMG_FORMAT = ".jpg"  # 图像格式
 
 # ====================

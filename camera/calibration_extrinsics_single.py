@@ -7,11 +7,11 @@ from typing import List, Tuple
 
 
 # ===== 单相机配置 =====
-DEFAULT_CONFIG_PATH = 'camera/config_lc.yaml'  # 只使用左相机配置
+DEFAULT_CONFIG_PATH = 'camera/cfg/config_lc.yaml'  # 只使用左相机配置
 DEFAULT_IMAGE_FOLDER = 'camera/imgs/'          # 单相机图像文件夹
 DEFAULT_OUTPUT_DIR = 'camera/calib_output/'
-DEFAULT_OUTPUT_INTRINSICS_FILE = 'intrinsics.yaml'  # 单相机内参文件
-DEFAULT_ROBOT_POSES_FILE = 'camera/robot_pos.txt'
+DEFAULT_OUTPUT_INTRINSICS_FILE = 'camera/cfg/intrinsics.yaml'  # 单相机内参文件
+DEFAULT_ROBOT_POSES_FILE = 'camera/cfg/robot_pos.txt'
 # ======================================================================
 
 
@@ -233,22 +233,22 @@ def main(config_path='camera/config_lc.yaml', image_folder='camera/imgs', robot_
         have_intrinsics = False
 
     # 如果没有内参，执行相机标定
-    #sample_img = cv2.imread(used_paths[0])
-    #image_size = (sample_img.shape[1], sample_img.shape[0])
-    #if not have_intrinsics:
-    #    print('[Info] 标定相机内参...')
-    #    camera_matrix, dist_coeffs, _, _ = calibrate_intrinsics(object_points, image_points, image_size)
-    #    print('[Info] 相机内参矩阵:')
-    #    print(camera_matrix)
-    #    print('[Info] 畸变系数:')
-    #    print(dist_coeffs)
+    sample_img = cv2.imread(used_paths[0])
+    image_size = (sample_img.shape[1], sample_img.shape[0])
+    if not have_intrinsics:
+        print('[Info] 标定相机内参...')
+        camera_matrix, dist_coeffs, _, _ = calibrate_intrinsics(object_points, image_points, image_size)
+        print('[Info] 相机内参矩阵:')
+        print(camera_matrix)
+        print('[Info] 畸变系数:')
+        print(dist_coeffs)
         
         # 保存内参到文件
         save_intrinsics_yaml(
-            os.path.join(DEFAULT_OUTPUT_DIR, DEFAULT_OUTPUT_INTRINSICS_FILE),
+            DEFAULT_OUTPUT_INTRINSICS_FILE,
             camera_matrix, dist_coeffs, image_size
         )
-        print(f'[Info] 相机内参已保存到 {DEFAULT_OUTPUT_DIR}/{DEFAULT_OUTPUT_INTRINSICS_FILE}')
+        print(f'[Info] 相机内参已保存到 {DEFAULT_OUTPUT_INTRINSICS_FILE}')
 
     # 计算每张图片的外参（target -> cam）
     print('[Info] 计算每张图片的外参（target->cam）')
