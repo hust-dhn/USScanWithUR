@@ -118,7 +118,7 @@ class DualCamera:
             print(f"[Init] Initializing dual cameras...")
             
             # 初始化两个传感器
-            self.sensor1 = InuSensor('1', '')
+            self.sensor1 = InuSensor('', '')
             self.sensor2 = InuSensor('2', '')
             
             # 初始化传感器

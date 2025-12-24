@@ -10,14 +10,14 @@ from datetime import datetime
 from queue import Queue
 from pynput import keyboard
 
-from dual_camera_wo_thread import DualCamera
+from single_camera import SingleCamera  # 导入单相机类
 
 # ====================
 # 参数配置
 # ====================
 # 机器人参数
-sensor_mass = 0.790  # 传感器质量，单位：千克
-sensor_cog = [0.034, 0.004, 0.069]  # 质心位置，单位：米
+sensor_mass = 0.600                 # 传感器质量，单位：千克
+sensor_cog = [0.013, 0.002, 0.060]  # 质心位置，单位：米
 robot_ip = "192.168.253.101"
 
 # 相机参数（不再使用 OpenCV VideoCapture）
@@ -26,8 +26,7 @@ IMG_HEIGHT = 1200
 
 # 图像和位姿存储参数
 NUM_POSES = 30  # 生成30个位姿（减少但增加多样性）
-LC_IMG_DIR = "camera/lc_imgs/"  # 左相机图像文件夹
-RC_IMG_DIR = "camera/rc_imgs/"  # 右相机图像文件夹
+IMG_DIR = "camera/imgs/"  # 单相机图像文件夹
 ROBOT_POS_FILE = "camera/robot_pos.txt"  # 机器人位姿文件
 IMG_FORMAT = ".jpg"  # 图像格式
 
@@ -41,8 +40,8 @@ quit_flag = False
 # 存储数据
 robot_poses = []  # 存储所有的4x4变换矩阵
 
-# DualCamera 实例（在 initialize_cameras 中创建）
-_dual_camera = None
+# SingleCamera 实例（在 initialize_camera 中创建）
+_single_camera = None
 
 # 多线程相关
 thread_display = None
@@ -81,47 +80,37 @@ def initialize_robot():
         return False
 
 
-def initialize_cameras():
-    """初始化左右相机"""
-    global left_camera, right_camera, _dual_camera
+def initialize_camera():
+    """初始化单相机"""
+    global _single_camera
     try:
-        # 使用 DualCamera 类进行初始化
-        _dual_camera = DualCamera(lc_imgs_path=LC_IMG_DIR, rc_imgs_path=RC_IMG_DIR, clear_on_init=False)
-        ok = _dual_camera.initialize()
+        # 使用 SingleCamera 类进行初始化
+        _single_camera = SingleCamera(imgs_path=IMG_DIR, clear_on_init=False)
+        ok = _single_camera.initialize()
         
-        if hasattr(_dual_camera.channels_size1, 'items'):
-            print("camera1各通道的图像尺寸:")
-            for channel_id, size in _dual_camera.channels_size1.items():
+        if hasattr(_single_camera.channels_size, 'items'):
+            print("相机各通道的图像尺寸:")
+            for channel_id, size in _single_camera.channels_size.items():
                 print(f"  通道 {channel_id}: {size}")
-                data1 = _dual_camera.sensor1.get_calibration_data(channel_id)
-                print(f"[Camera] Left Camera Calibration Data: {data1}")
-        
-        if hasattr(_dual_camera.channels_size2, 'items'):
-            print("camera2各通道的图像尺寸:")
-            for channel_id, size in _dual_camera.channels_size2.items():
-                print(f"  通道 {channel_id}: {size}")
-                data2 = _dual_camera.sensor2.get_calibration_data(channel_id)
-                print(f"[Camera] Right Camera Calibration Data: {data2}")
+                data = _single_camera.sensor.get_calibration_data(channel_id)
+                print(f"[Camera] Camera Calibration Data: {data}")
 
         if not ok:
-            print("[Error] DualCamera 初始化失败")
+            print("[Error] SingleCamera 初始化失败")
             return False
-        # left_camera/right_camera are not cv2.VideoCapture here, keep as None for compatibility
-        left_camera = None
-        right_camera = None
-        print(f"[Camera] DualCamera 已初始化")
+        
+        print(f"[Camera] SingleCamera 已初始化")
         return True
     except Exception as e:
         print(f"[Error] 相机初始化失败: {e}")
         return False
 
 
-def create_image_directories():
+def create_image_directory():
     """创建图像存储目录"""
     try:
-        Path(LC_IMG_DIR).mkdir(exist_ok=True)
-        Path(RC_IMG_DIR).mkdir(exist_ok=True)
-        print(f"[Setup] 图像目录已创建: {LC_IMG_DIR}, {RC_IMG_DIR}")
+        Path(IMG_DIR).mkdir(exist_ok=True)
+        print(f"[Setup] 图像目录已创建: {IMG_DIR}")
         return True
     except Exception as e:
         print(f"[Error] 创建目录失败: {e}")
@@ -237,39 +226,35 @@ def pose_4x4_to_6d(pose_matrix):
 # ====================
 # 相机控制函数
 # ====================
-def capture_images_from_both_cameras(pose_index):
+def capture_image_from_camera(pose_index):
     """
-    从左右两个相机拍照
+    从单相机拍照
     
     :param pose_index: 位姿索引（0-54）
     :return: 是否拍照成功
     """
     try:
-        # 仅使用 DualCamera 获取帧（不再使用 OpenCV VideoCapture）
-        global _dual_camera
-        if _dual_camera is None:
-            print(f"[Error] DualCamera 未初始化，无法拍照（位姿 {pose_index}）")
+        # 使用 SingleCamera 获取帧
+        global _single_camera
+        if _single_camera is None:
+            print(f"[Error] SingleCamera 未初始化，无法拍照（位姿 {pose_index}）")
             return False
 
-        frame1, frame2 = _dual_camera.get_frames()
-        if frame1 is None or frame2 is None:
-            print(f"[Error] DualCamera 未获取到帧，位姿 {pose_index}")
+        frame = _single_camera.get_frame()
+        if frame is None:
+            print(f"[Error] SingleCamera 未获取到帧，位姿 {pose_index}")
             return False
 
-        # 将 frame.buffer 转为 numpy image 并保存为要求的命名
+        # 将 frame.buffer 转为 numpy image 并保存
         try:
-            if getattr(frame1, 'buffer', None) is None or getattr(frame2, 'buffer', None) is None:
+            if getattr(frame, 'buffer', None) is None:
                 print(f"[Error] 帧缓冲为空，位姿 {pose_index}")
                 return False
 
-            img_l = np.array(frame1.buffer, dtype=np.uint8).reshape(frame1.height, frame1.width, 4)
-            img_r = np.array(frame2.buffer, dtype=np.uint8).reshape(frame2.height, frame2.width, 4)
-
-            lc_filename = f"{LC_IMG_DIR}/{pose_index}{IMG_FORMAT}"
-            rc_filename = f"{RC_IMG_DIR}/{pose_index}{IMG_FORMAT}"
-            cv2.imwrite(lc_filename, img_l)
-            cv2.imwrite(rc_filename, img_r)
-            print(f"[Camera] 已保存图像 {pose_index}: {lc_filename}, {rc_filename}")
+            img = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
+            filename = f"{IMG_DIR}/{pose_index}{IMG_FORMAT}"
+            cv2.imwrite(filename, img)
+            print(f"[Camera] 已保存图像 {pose_index}: {filename}")
             return True
         except Exception as ex:
             print(f"[Error] 保存帧时出错: {ex}")
@@ -322,7 +307,6 @@ def save_robot_poses_to_file(poses, filename=ROBOT_POS_FILE):
     """
     将所有机器人位姿保存到文件
     
-
     :param poses: 位姿列表，每个位姿是16元素列表（4x4矩阵展开）
     :param filename: 保存文件名
     """
@@ -343,12 +327,12 @@ def save_robot_poses_to_file(poses, filename=ROBOT_POS_FILE):
 # ====================                                                                                                                                       
 def thread_display_live_view():
     """
-    线程1：实时显示左右相机的画面
+    线程1：实时显示相机的画面
     """
     print("[Thread-Display] 实时显示线程已启动")
     
     try:
-        _dual_camera.display_live_view(duration=None)
+        _single_camera.display_live_view(duration=None)
     except Exception as e:
         print(f"[Thread-Display] 错误: {e}")
     finally:
@@ -418,22 +402,19 @@ def thread_keyboard_control():
                 try:
                     for i in range(FRAMES_PER_POSE):
                         # 获取帧
-                        frame1, frame2 = _dual_camera.get_frames()
-                        if frame1 is None or frame2 is None:
+                        frame = _single_camera.get_frame()
+                        if frame is None:
                             print(f"[Thread-Keyboard] 第 {i+1} 帧获取失败")
                             continue
 
                         # 生成唯一文件名：时间戳 + 序号
                         ts = int(time.time() * 1000)
-                        lc_filename = f"{LC_IMG_DIR}/{ts}_{i}{IMG_FORMAT}"
-                        rc_filename = f"{RC_IMG_DIR}/{ts}_{i}{IMG_FORMAT}"
+                        filename = f"{IMG_DIR}/{ts}_{i}{IMG_FORMAT}"
 
                         try:
-                            img_l = np.array(frame1.buffer, dtype=np.uint8).reshape(frame1.height, frame1.width, 4)
-                            img_r = np.array(frame2.buffer, dtype=np.uint8).reshape(frame2.height, frame2.width, 4)
-                            cv2.imwrite(lc_filename, img_l)
-                            cv2.imwrite(rc_filename, img_r)
-                            print(f"[Thread-Keyboard] 已保存图片: {lc_filename}, {rc_filename}")
+                            img = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
+                            cv2.imwrite(filename, img)
+                            print(f"[Thread-Keyboard] 已保存图片: {filename}")
                         except Exception as ex:
                             print(f"[Thread-Keyboard] 保存图片失败: {ex}")
                             continue
@@ -483,7 +464,7 @@ def thread_keyboard_control():
 
 def automatic_scan_with_threads():
     """
-    自动扫描：移动机器人到55个位姿，在每个位姿自动拍摄10张照片
+    自动扫描：移动机器人到指定个位姿，在每个位姿自动拍摄照片
     """
     global thread_display, thread_keyboard, thread_freedrive
     
@@ -553,7 +534,7 @@ def automatic_scan_with_threads():
             except:
                 pass
             
-            # 在该位姿自动保存 10 张照片
+            # 在该位姿自动保存照片
             print(f"[Main] 开始在位姿 {pose_idx} 保存 {FRAMES_PER_POSE} 张照片...")
             
             for frame_in_pose in range(FRAMES_PER_POSE):
@@ -562,26 +543,22 @@ def automatic_scan_with_threads():
                     break
                 
                 # 获取当前帧
-                frame1, frame2 = _dual_camera.get_frames()
+                frame = _single_camera.get_frame()
                 
-                if frame1 is None or frame2 is None:
+                if frame is None:
                     print(f"[Main] 位姿 {pose_idx} 第 {frame_in_pose+1} 帧获取失败")
                     continue
                 
                 # 保存帧
                 try:
-                    if getattr(frame1, 'buffer', None) is None or getattr(frame2, 'buffer', None) is None:
+                    if getattr(frame, 'buffer', None) is None:
                         print(f"[Main] 位姿 {pose_idx} 第 {frame_in_pose+1} 帧缓冲为空")
                         continue
                     
-                    img_l = np.array(frame1.buffer, dtype=np.uint8).reshape(frame1.height, frame1.width, 4)
-                    img_r = np.array(frame2.buffer, dtype=np.uint8).reshape(frame2.height, frame2.width, 4)
+                    img = np.array(frame.buffer, dtype=np.uint8).reshape(frame.height, frame.width, 4)
+                    filename = f"{IMG_DIR}/{frame_global_index}{IMG_FORMAT}"
                     
-                    lc_filename = f"{LC_IMG_DIR}/{frame_global_index}{IMG_FORMAT}"
-                    rc_filename = f"{RC_IMG_DIR}/{frame_global_index}{IMG_FORMAT}"
-                    
-                    cv2.imwrite(lc_filename, img_l)
-                    cv2.imwrite(rc_filename, img_r)
+                    cv2.imwrite(filename, img)
                     
                     print(f"[Main] 位姿 {pose_idx} 已保存第 {frame_in_pose+1}/{FRAMES_PER_POSE} 张: {frame_global_index}")
                     
@@ -677,7 +654,7 @@ def scan_with_positions_legacy():
             time.sleep(1.0)
             
             # 拍照
-            if not capture_images_from_both_cameras(idx):
+            if not capture_image_from_camera(idx):
                 print(f"[Warning] 位姿 {idx} 拍照失败")
                 continue
             
@@ -706,10 +683,10 @@ def cleanup():
     try:
         print("\n[Cleanup] 正在清理资源...")
         
-        # 关闭 DualCamera（如果存在）
-        if '_dual_camera' in globals() and _dual_camera is not None:
+        # 关闭 SingleCamera（如果存在）
+        if '_single_camera' in globals() and _single_camera is not None:
             try:
-                _dual_camera.close()
+                _single_camera.close()
             except Exception:
                 pass
 
@@ -735,25 +712,24 @@ def main():
     global quit_flag
     
     print("\n" + "="*50)
-    print("机器人超声扫描系统 - 图像采集和位姿记录")
+    print("机器人超声扫描系统 - 图像采集和位姿记录（单相机版）")
     print("="*50)
     print(f"[Config] 扫描位姿数: {NUM_POSES}")
     print(f"[Config] 每个位姿保存帧数: {FRAMES_PER_POSE}")
     print(f"[Config] 总预期照片数: {NUM_POSES * FRAMES_PER_POSE}")
-    print(f"[Config] 左相机图像目录: {LC_IMG_DIR}")
-    print(f"[Config] 右相机图像目录: {RC_IMG_DIR}")
+    print(f"[Config] 相机图像目录: {IMG_DIR}")
     print(f"[Config] 位姿保存文件: {ROBOT_POS_FILE}")
     print("="*50 + "\n")
     
     try:
         # 初始化
-        if not create_image_directories():
+        if not create_image_directory():
             return False
         
         if not initialize_robot():
             return False
         
-        if not initialize_cameras():
+        if not initialize_camera():
             return False
         
         # 提示用户确认
