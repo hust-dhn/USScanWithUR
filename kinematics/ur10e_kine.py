@@ -7,7 +7,7 @@ import math
 import numpy as np   
 import time         
 import rtde_control  
-import rtde_receive  
+import rtde_receive 
 
 rtde_c= None
 rtde_r= None
@@ -20,7 +20,13 @@ class UR10eKine:
         self.alpha = [math.pi/2, 0, 0, math.pi/2, -math.pi/2, 0]  
         rtde_c = rtde_control.RTDEControlInterface(robot_ip)
         rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
-
+        self.T_end2tcp = np.matrix([
+        [ 0,  1,  0,  0 ],
+        [ 0,  0,  1,  0.07625 ],
+        [ 1,  0,  0,  0.08900436787 ],
+        [ 0,  0,  0,  1 ]
+        ])
+        
     def THT(self, Theta, A, D, Alpha):
 
         T = np.asmatrix((
@@ -38,10 +44,11 @@ class UR10eKine:
         T34 = self.THT(theta[3], self.a[3], self.d[3], self.alpha[3])  
         T45 = self.THT(theta[4], self.a[4], self.d[4], self.alpha[4])  
         T56 = self.THT(theta[5], self.a[5], self.d[5], self.alpha[5])   
-        T = np.matrix(T01 * T12 * T23 * T34 * T45 * T56 )
+        T = np.matrix(T01 * T12 * T23 * T34 * T45 * T56 * self.T_end2tcp)
         return T  
  
     def IK(self, T: np.matrix, curr_theta: list):
+        T = T @ np.linalg.inv(self.T_end2tcp)
         nx = T[0, 0]
         ny = T[1, 0]
         nz = T[2, 0]
@@ -155,34 +162,30 @@ class UR10eKine:
      z = T_matrix[2, 3]
      R = T_matrix[:3, :3]
      trace = R[0, 0] + R[1, 1] + R[2, 2]
-     angle = math.acos(max(-1, min(1, (trace - 1) / 2)))  
-     if abs(angle) < 1e-6: 
-        rx = ry = rz = 0
-     else:
-        factor = 0.5 / math.sin(angle) if abs(math.sin(angle)) > 1e-6 else 1
-        rx = factor * (R[2, 1] - R[1, 2])
-        ry = factor * (R[0, 2] - R[2, 0])
-        rz = factor * (R[1, 0] - R[0, 1])
+     cos_angle = (trace - 1) / 2
+     angle = math.acos(cos_angle) 
+     sin_angle = math.sin(angle) 
+     factor = 1 / (2 * sin_angle)
+     rx = factor * (R[2, 1] - R[1, 2])
+     ry = factor * (R[0, 2] - R[2, 0])
+     rz = factor * (R[1, 0] - R[0, 1])
      return [x, y, z, rx, ry, rz]
 
     def XYZRXRYRZ_to_Tmatrix(self, xyzrxryrz):
      x, y, z, rx, ry, rz = xyzrxryrz
      angle = math.sqrt(rx**2 + ry**2 + rz**2)
-     if abs(angle) < 1e-6:
-        R = np.eye(3)
-     else:
-        ux = rx / angle
-        uy = ry / angle
-        uz = rz / angle
-        cos_a = math.cos(angle)
-        sin_a = math.sin(angle)
-        one_minus_cos_a = 1 - cos_a
-        R = np.matrix([
+     ux = rx / angle
+     uy = ry / angle
+     uz = rz / angle
+     cos_a = math.cos(angle)
+     sin_a = math.sin(angle)
+     one_minus_cos_a = 1 - cos_a
+     R = np.matrix([
             [cos_a + ux**2 * one_minus_cos_a, ux * uy * one_minus_cos_a - uz * sin_a, ux * uz * one_minus_cos_a + uy * sin_a],
             [uy * ux * one_minus_cos_a + uz * sin_a, cos_a + uy**2 * one_minus_cos_a, uy * uz * one_minus_cos_a - ux * sin_a],
             [uz * ux * one_minus_cos_a - uy * sin_a, uz * uy * one_minus_cos_a + ux * sin_a, cos_a + uz**2 * one_minus_cos_a]
         ])
-        T = np.matrix([
+     T = np.matrix([
         [R[0, 0], R[0, 1], R[0, 2], x],
         [R[1, 0], R[1, 1], R[1, 2], y],
         [R[2, 0], R[2, 1], R[2, 2], z],
@@ -198,14 +201,27 @@ def main():
     theta_jiaodu = [90, -90, 90, -90, 90, -90]
     theta = [theta_jiaodu[i]/180*math.pi for i in range(6)]
     FK_result = ur10eKine.FK(theta)
-    target_pose = ur10eKine.Tmatrix_to_XYZRXRYRZ(FK_result)
-    print("目标位姿:\n",target_pose) 
+    start_time = time.time()
+    target_pose = ur10eKine.Tmatrix_to_XYZRXRYRZ(FK_result @ np.linalg.inv(ur10eKine.T_end2tcp))
+    end_time = time.time()
+    print(f"转换计算时间: {end_time - start_time} 秒")
+    print("目标位姿:\n",target_pose)
+
     velocity = 0.1 
     acceleration = 0.1 
-    #rtde_c.moveJ(theta, velocity, acceleration)
+    rtde_c.moveJ(theta, velocity, acceleration)
     print('示教器位姿：\n', rtde_r.getActualTCPPose())
+    
     print("\n对比:\n",np.array(rtde_r.getActualTCPPose()) - np.array(target_pose))
-    print("是否接近", np.allclose(np.array(rtde_r.getActualTCPPose()), np.array(target_pose), atol=1e-3))
+    threshold = 1e-3  
+    error_distance = np.linalg.norm(np.array(rtde_r.getActualTCPPose()) - np.array(target_pose))
+    print(f"欧几里得误差距离: {error_distance}")
+    is_close = error_distance < threshold
+    print(f"欧几里得距离是否接近? {is_close} ")
+    rmse = np.sqrt(np.mean((np.array(rtde_r.getActualTCPPose()) - np.array(target_pose))**2))
+    print(f"均方根误差: {rmse}")
+    is_close = rmse < threshold
+    print(f"均方根是否接近? {is_close} ")
 
     # Test2: 逆运动学测试
     IK_result = ur10eKine.IK(FK_result, theta)
@@ -218,7 +234,7 @@ def main():
         T[2, 3] -= 0.001
         IK_result = ur10eKine.IK(T, theta)
         print("测试逆运动学:\n",IK_result)
-        #rtde_c.moveJ(IK_result, velocity, acceleration)
+        rtde_c.moveJ(IK_result, velocity, acceleration)
         theta = rtde_r.getActualQ()
         print("theta: \n", theta)
         z_sum += 1
