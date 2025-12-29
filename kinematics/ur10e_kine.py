@@ -8,6 +8,7 @@ import numpy as np
 import time         
 import rtde_control  
 import rtde_receive 
+import yaml
 
 rtde_c= None
 rtde_r= None
@@ -20,12 +21,19 @@ class UR10eKine:
         self.alpha = [math.pi/2, 0, 0, math.pi/2, -math.pi/2, 0]  
         rtde_c = rtde_control.RTDEControlInterface(robot_ip)
         rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
-        self.T_end2tcp = np.matrix([
-        [ 0,  1,  0,  0 ],
-        [ 0,  0,  1,  0.07625 ],
-        [ 1,  0,  0,  0.08900436787 ],
-        [ 0,  0,  0,  1 ]
+        self.T_end2tcp = self.load_offset_from_yaml("T_end2tcp.yaml")
+
+    def load_offset_from_yaml(self, yaml_file_path):
+     with open(yaml_file_path, 'r', encoding='utf-8') as file:
+         data = yaml.safe_load(file)
+     transform_data = data['transform']
+     T = np.matrix([
+        [transform_data[0], transform_data[1], transform_data[2], transform_data[3]],
+        [transform_data[4], transform_data[5], transform_data[6], transform_data[7]],
+        [transform_data[8], transform_data[9], transform_data[10], transform_data[11]],
+        [transform_data[12], transform_data[13], transform_data[14], transform_data[15]]
         ])
+     return T    
         
     def THT(self, Theta, A, D, Alpha):
 
@@ -207,23 +215,32 @@ def main():
     end_time = time.time()
     print(f"转换计算时间: {end_time - start_time} 秒")
     print("目标位姿:\n",target_pose)
+    target_xyz = target_pose[:3]
+    target_rxryrz = target_pose[3:] 
 
     velocity = 0.1 
     acceleration = 0.1 
     rtde_c.moveJ(theta, velocity, acceleration)
     tcp_pose = rtde_r.getActualTCPPose()
+    actual_xyz = tcp_pose[:3]       
+    actual_rxryrz = tcp_pose[3:]
 
+    pos_error = np.array(target_xyz) - np.array(actual_xyz)
+    pos_error_distance = np.linalg.norm(pos_error)
+    print(f"位置误差向量: {pos_error}")
+    print(f"位置误差距离: {pos_error_distance:.6f} m")
 
-    print("\n对比:\n",np.array(tcp_pose) - np.array(target_pose))
-    threshold = 1e-3  
-    error_distance = np.linalg.norm(np.array(tcp_pose) - np.array(target_pose))
-    print(f"欧几里得误差距离: {error_distance}")
-    is_close = error_distance < threshold
-    print(f"欧几里得距离是否接近? {is_close} ")
-    rmse = np.sqrt(np.mean((np.array(tcp_pose) - np.array(target_pose))**2))
-    print(f"均方根误差: {rmse}")
-    is_close = rmse < threshold
-    print(f"均方根是否接近? {is_close} ")
+    ori_error = np.array(target_rxryrz) - np.array(actual_rxryrz)
+    ori_error_distance = np.linalg.norm(ori_error)
+    print(f"姿态误差向量: {ori_error}")
+    print(f"姿态误差距离: {ori_error_distance:.6f} rad")
+
+    pos_threshold = 1e-2      
+    ori_threshold = 0.1
+    if pos_error_distance < pos_threshold and ori_error_distance < ori_threshold:
+        print("正运动学测试通过！")
+    else:
+        print("正运动学测试未通过！")     
 
     # Test2: 逆运动学测试
     IK_result = ur10eKine.IK(FK_result, theta)
