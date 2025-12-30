@@ -119,4 +119,23 @@ ssh-copy-id zzz@14.0.1.49
 # Helper: pip+清华源
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple xxx
 
+# Helper: 使用ros通信
+cd /home/zzz/vector6_ws
+#设置ros2环境
+source /opt/humble/setup.bash
+source ~/vector6_ws/install/setup.bash
+cd ~/vector6_ws
+#打开一个新终端，发出信号
+conda deactivate            //确保退出全部conda环境
+cd /home/zzz/vector6_ws
+source /opt/humble/setup.bash
+source ~/vector6_ws/install/setup.bash
+python3 publisher.py
+#接收信号，在code中：
+conda deactivate            //进入base环境
+conda deactivate           //无环境
+source /opt/humble/setup.bash
+source ~/vector6_ws/install/setup.bash
+#运行订阅程序
+
 # Helper: xxxx
