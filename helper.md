@@ -23,7 +23,7 @@
 
 # Helper: 重新安装驱动
 ## 步骤：
-cd /home/zzz/ros2_ws/src/my_ur10e_control/camera/linux_x86
+cd /home/zzz/ros2_ws/src/my_ur10e_control/linux_x86
 sudo dpkg -i inudev_4.36.0008.02-1_amd64.deb
 
 # Helper: 设置双相机模组
@@ -118,5 +118,7 @@ ssh-copy-id zzz@14.0.1.49
 
 # Helper: pip+清华源
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple xxx
+
+# Helper: 
 
 # Helper: xxxx

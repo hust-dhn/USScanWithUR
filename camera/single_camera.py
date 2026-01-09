@@ -97,8 +97,9 @@ class SingleCamera:
             print(f"[Init] Sensor callback registered")
             
             # 创建并启动图像流
-            self.stream = self.sensor.create_stream(StreamType.GENERAL_CAMERA)
-            
+            self.streamrgb = self.sensor.create_stream(StreamType.GENERAL_CAMERA)
+            self.streamdepth = self.sensor.create_stream(StreamType.DEPTH)
+
             self.stream.init()
             self.stream.start()
             
