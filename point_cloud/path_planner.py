@@ -15,10 +15,12 @@ class InteractivePathApp:
         self.voxel_size = voxel_size
         self.pcd_path = pcd_path
         
-        # --- 核心参数设置 ---
-        self.standoff_distance = 0.01  # 基础悬浮高度: 1cm
-        self.tool_radius = 0.05        # 工具半径: 2cm (关键避障参数)
-        self.safety_buffer = 0.005     # 安全余量: 5mm (避障时的额外高度)
+        # --- 核心设置：远离表面的距离 (单位: 米) ---
+        self.standoff_distance = 0.01  # 1cm
+        
+        # 状态变量
+        self.show_axes_state = False  # 是否显示坐标轴的开关状态
+        self.axes_geometry = None     # 存储坐标轴的LineSet对象
         
         # 加载和预处理
         self.pcd = self._load_pcd(pcd_path, voxel_size)
@@ -30,7 +32,7 @@ class InteractivePathApp:
         
         print("2. 构建拓扑图 (请稍候)...")
         self.graph = self._build_graph()
-        print(f"   系统就绪！工具半径: {self.tool_radius*100:.1f}cm")
+        print("   系统就绪！")
         
         self.keep_running = True
 
@@ -71,79 +73,6 @@ class InteractivePathApp:
             avg_normal /= norm
         return avg_normal
 
-    def _compute_collision_free_heights(self, surface_points, normals):
-        """
-        [核心算法] 体积碰撞检测
-        检测以 surface_point 为中心，tool_radius 为半径的圆柱体内，
-        是否有高于 standoff_distance 的点云障碍物。
-        """
-        num_points = len(surface_points)
-        # 初始化高度数组，默认为基础悬浮距离
-        safe_heights = np.full(num_points, self.standoff_distance)
-        
-        # 搜索半径：工具半径 + 适当余量，确保覆盖边缘
-        search_radius = self.tool_radius * 1.2 
-        
-        print(f"   正在进行体积碰撞检测 (搜索半径 {search_radius*100:.1f}cm)...")
-
-        for i in range(num_points):
-            p = surface_points[i]
-            n = normals[i]
-            
-            # 1. 粗筛选：KDTree 找附近的点
-            idx = self.kdtree.query_ball_point(p, search_radius)
-            if not idx: continue
-            
-            neighbors = self.points[idx]
-            
-            # 2. 局部坐标变换：计算邻居点相对于当前点 p 的向量
-            vecs = neighbors - p
-            
-            # 3. 投影计算
-            # 垂直分量 (高度): v · n (点乘)
-            heights_proj = np.dot(vecs, n)
-            
-            # 水平分量向量: v - (v·n)n
-            # 利用广播机制计算
-            vert_vecs = np.outer(heights_proj, n)
-            horiz_vecs = vecs - vert_vecs
-            
-            # 水平距离 (横向距离)
-            lat_dists = np.linalg.norm(horiz_vecs, axis=1)
-            
-            # 4. 碰撞判定
-            # 条件：横向距离 < 工具半径 且 高度 > 0 (只关心凸起的障碍物)
-            mask_cylinder = lat_dists < self.tool_radius
-            
-            if np.any(mask_cylinder):
-                # 找出圆柱范围内最高的障碍物
-                # 只关心正向突出的点 (heights_proj > 0)
-                relevant_heights = heights_proj[mask_cylinder]
-                if len(relevant_heights) > 0:
-                    max_obstacle_height = np.max(relevant_heights)
-                    
-                    # 只有当障碍物高度接近或超过当前设定的悬浮高度时，才需要调整
-                    # 目标高度 = 障碍物最高点 + 安全余量
-                    required_h = max_obstacle_height + self.safety_buffer
-                    
-                    if required_h > safe_heights[i]:
-                        safe_heights[i] = required_h
-
-        # 5. 高度平滑 (避免路径因避让突然剧烈跳变)
-        window_size = 15
-        if len(safe_heights) > window_size:
-            kernel = np.ones(window_size) / window_size
-            # 使用 same 模式卷积平滑
-            smoothed_heights = np.convolve(safe_heights, kernel, mode='same')
-            # 再次强制确保不低于基础悬浮距离 (平滑可能会把峰值拉低，取最大值比较安全)
-            safe_heights = np.maximum(smoothed_heights, self.standoff_distance)
-            
-            # 额外处理：再次确保包含最大障碍物 (防止平滑过度导致撞上)
-            # 简单策略：如果平滑后降低太多，保留原始值的 90%
-            # (这里为了代码简洁，主要依赖上面的 maximum 保证最低高度)
-
-        return safe_heights
-
     def _generate_smooth_path(self, start_idx, end_idx, num_output_points=300):
         try:
             # 1. Dijkstra 骨架
@@ -165,7 +94,7 @@ class InteractivePathApp:
                     clean_cp.append(control_points[i])
             control_points = np.array(clean_cp)
 
-            # 3. B样条生成表面上的坐标
+            # 3. B样条生成表面上的坐标 (surface_points)
             tck, u = splprep(control_points.T, k=min(3, len(control_points)-1), s=0.0)
             u_new = np.linspace(0, 1, num_output_points)
             surface_points = np.array(splev(u_new, tck)).T
@@ -192,44 +121,126 @@ class InteractivePathApp:
                 current_ref = candidate
             final_normals = np.array(final_normals)
 
-            # 5. --- 核心修改：计算动态安全高度 ---
-            safe_heights = self._compute_collision_free_heights(surface_points, final_normals)
-
-            # 打印调试信息
-            max_h = np.max(safe_heights)
-            if max_h > self.standoff_distance + 0.001:
-                print(f"   !!! 警告：检测到障碍物，局部路径已抬升至 {max_h*100:.2f}cm")
+            # 5. --- 核心逻辑：构建包含“贴合点”的完整轨迹 ---
             
-            # 计算悬浮段 (利用广播机制: (N,3) + (N,3) * (N,1))
-            offset_points = surface_points + final_normals * safe_heights[:, np.newaxis]
+            # 计算悬浮段 (原本的 1cm 路径)
+            offset_points = surface_points + final_normals * self.standoff_distance
             
-            # 6. 拼接最终轨迹
+            # 拼接最终轨迹：[表面起点] + [悬浮路径] + [表面终点]
             full_path = np.vstack([
-                surface_points[0],    # 起点贴合
-                offset_points,        # 中间悬浮(变高)
-                surface_points[-1]    # 终点贴合
+                surface_points[0],    # 1. 起点贴合表面
+                offset_points,        # 2. 中间段全部悬浮 1cm
+                surface_points[-1]    # 3. 终点贴合表面
             ])
             
+            # 对应的法向量也要补全 (首尾各复制一个)
             full_normals = np.vstack([
-                final_normals[0],     
-                final_normals,        
-                final_normals[-1]     
+                final_normals[0],     # 对应表面起点
+                final_normals,        # 对应悬浮段
+                final_normals[-1]     # 对应表面终点
             ])
             
             return full_path, full_normals
 
         except Exception as e:
             print(f"路径生成警告: {e}")
-            import traceback
-            traceback.print_exc()
             return None, None
+
+    def _calculate_rotation_matrix(self, pos, normal, target_pos):
+        """
+        构建旋转矩阵 (严格按照 Z -> X -> Y 顺序):
+        1. Z轴: 确定为表面法向 (Normal)
+        2. X轴: 尽可能指向 Target，但必须投影到 Z 的垂面上
+        3. Y轴: 由 Z cross X 确定
+        """
+        # --- 第一步：确定 Z 轴 ---
+        z_axis = normal / (np.linalg.norm(normal) + 1e-9)
+        
+        # --- 第二步：确定 X 轴 ---
+        # 1. 获取原始指向向量 V = Target - Pos
+        vec_to_target = target_pos - pos
+        
+        # 2. 将 V 投影到垂直于 Z 的平面上
+        # 公式: V_proj = V - (V dot Z) * Z
+        # 这样能保证新的 X 与 Z 严格垂直
+        projection = vec_to_target - np.dot(vec_to_target, z_axis) * z_axis
+        
+        # 3. 处理奇异情况 (如果 Target 恰好在 Z 轴方向上，投影为0)
+        if np.linalg.norm(projection) < 1e-6:
+            # 这种情况下 X 轴方向不确定，选取一个任意垂直于 Z 的向量
+            temp_ref = np.array([1.0, 0.0, 0.0])
+            if abs(z_axis[0]) > 0.9: temp_ref = np.array([0.0, 1.0, 0.0])
+            x_axis = np.cross(temp_ref, z_axis) # 此时还没定方向，只求垂直
+        else:
+            x_axis = projection
+            
+        # 4. 归一化 X
+        x_axis = x_axis / (np.linalg.norm(x_axis) + 1e-9)
+        
+        # --- 第三步：确定 Y 轴 ---
+        # 右手定则: Z cross X = Y
+        y_axis = np.cross(z_axis, x_axis)
+        y_axis = y_axis / (np.linalg.norm(y_axis) + 1e-9)
+        
+        # 构建矩阵 (列向量 [X, Y, Z, Pos])
+        mat = np.eye(4)
+        mat[0:3, 0] = x_axis  # R11, R21, R31
+        mat[0:3, 1] = y_axis  # R12, R22, R32
+        mat[0:3, 2] = z_axis  # R13, R23, R33
+        mat[0:3, 3] = pos     # Tx, Ty, Tz
+        return mat
+
+    def _create_axes_visualization(self, points, normals, target_pos, axis_len=0.005):
+        """生成所有点的坐标轴可视化 geometry"""
+        lines_points = []
+        lines_indices = []
+        colors = []
+        
+        idx_counter = 0
+        
+        for i in range(len(points)):
+            pos = points[i]
+            normal = normals[i]
+            
+            mat = self._calculate_rotation_matrix(pos, normal, target_pos)
+            x_axis = mat[0:3, 0]
+            y_axis = mat[0:3, 1]
+            z_axis = mat[0:3, 2]
+            
+            # 原点
+            p0 = pos
+            # 轴的端点
+            px = pos + x_axis * axis_len
+            py = pos + y_axis * axis_len
+            pz = pos + z_axis * axis_len
+            
+            # 添加点
+            lines_points.extend([p0, px, p0, py, p0, pz])
+            
+            # 添加线索引
+            base = idx_counter
+            lines_indices.extend([[base, base+1], [base+2, base+3], [base+4, base+5]])
+            
+            # 添加颜色 (R=X, G=Y, B=Z)
+            colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+            
+            idx_counter += 6
+            
+        line_set = o3d.geometry.LineSet()
+        line_set.points = o3d.utility.Vector3dVector(lines_points)
+        line_set.lines = o3d.utility.Vector2iVector(lines_indices)
+        line_set.colors = o3d.utility.Vector3dVector(colors)
+        return line_set
 
     def run_selection_window(self):
         print("\n" + "="*50)
-        print("【阶段一：选点】 Shift + 左键点击 2 个点")
+        print("【阶段一：选点】 请按顺序 Shift + 左键点击 3 个点")
+        print("  1. 路径起点")
+        print("  2. 路径终点")
+        print("  3. 姿态定向目标 (X轴正方向将指向此点)")
         print("="*50)
         vis = o3d.visualization.VisualizerWithEditing()
-        vis.create_window(window_name="1. 选点模式", width=1000, height=800)
+        vis.create_window(window_name="1. 选点模式 (需选3点)", width=1000, height=800)
         pcd_display = o3d.geometry.PointCloud(self.pcd)
         pcd_display.paint_uniform_color([0.7, 0.7, 0.7])
         vis.add_geometry(pcd_display)
@@ -238,30 +249,32 @@ class InteractivePathApp:
         vis.destroy_window()
         return picked_indices
 
-    def run_result_window(self, points, normals, start_idx, end_idx):
+    def run_result_window(self, points, normals, start_idx, end_idx, target_pos):
         print("\n" + "="*50)
         print("【阶段二：结果预览】")
         print(f"  路径点数: {len(points)}")
-        print(f"  基础悬浮: {self.standoff_distance}m")
-        print(f"  工具半径: {self.tool_radius}m (已考虑体积碰撞)")
-        print("  [R]重置  [S]保存(4x4矩阵)  [Q]退出")
+        print("  操作说明:")
+        print("  [T] 显示/隐藏 变换矩阵坐标轴 (红X 绿Y 蓝Z)")
+        print("  [R] 重置视图")
+        print("  [S] 保存矩阵到文件")
+        print("  [Q] 退出程序")
         print("="*50)
 
         vis = o3d.visualization.VisualizerWithKeyCallback()
         vis.create_window(window_name=f"2. 结果预览", width=1000, height=800)
 
-        # 1. 原始点云
+        # 1. 基础几何体
         pcd_display = o3d.geometry.PointCloud(self.pcd)
         pcd_display.paint_uniform_color([0.8, 0.8, 0.8])
         vis.add_geometry(pcd_display)
 
-        # 2. 悬浮路径点
+        # 路径点
         path_pcd = o3d.geometry.PointCloud()
         path_pcd.points = o3d.utility.Vector3dVector(points)
-        path_pcd.paint_uniform_color([0.8, 0.1, 0.8]) # 紫色
+        path_pcd.paint_uniform_color([0.8, 0.1, 0.8])
         vis.add_geometry(path_pcd)
 
-        # 3. 路径连线
+        # 路径线
         line_set = o3d.geometry.LineSet()
         line_set.points = o3d.utility.Vector3dVector(points)
         lines = [[i, i+1] for i in range(len(points)-1)]
@@ -269,89 +282,50 @@ class InteractivePathApp:
         line_set.paint_uniform_color([0.6, 0, 0.6])
         vis.add_geometry(line_set)
         
-        # 4. 法向可视化 (橙色)
-        normal_length = 0.015 
-        normal_points = []
-        normal_lines = []
-        for i, (p, n) in enumerate(zip(points, normals)):
-            normal_points.append(p)
-            normal_points.append(p + n * normal_length)
-            normal_lines.append([i*2, i*2+1])
-            
-        normal_vis = o3d.geometry.LineSet()
-        normal_vis.points = o3d.utility.Vector3dVector(normal_points)
-        normal_vis.lines = o3d.utility.Vector2iVector(normal_lines)
-        normal_vis.paint_uniform_color([1.0, 0.6, 0.0])
-        vis.add_geometry(normal_vis)
+        # 2. 定向目标可视化 (小蓝球 - 调小尺寸)
+        target_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.004) # 原 0.015
+        target_sphere.translate(target_pos)
+        target_sphere.paint_uniform_color([0, 0, 1])
+        vis.add_geometry(target_sphere)
 
-        # 5. 起终点
+        # 3. 起终点 (绿起 红终 - 调小尺寸)
         for idx, c in zip([start_idx, end_idx], [[0,1,0], [1,0,0]]):
-            s_surf = o3d.geometry.TriangleMesh.create_sphere(radius=0.005)
+            s_surf = o3d.geometry.TriangleMesh.create_sphere(radius=0.002) # 原 0.005
             s_surf.translate(self.points[idx])
             s_surf.paint_uniform_color(c)
             vis.add_geometry(s_surf)
 
-        def reset_callback(vis):
-            vis.close()
-            return False
+        # 4. 预计算坐标轴显示 (默认不显示)
+        self.axes_geometry = self._create_axes_visualization(points, normals, target_pos)
+        self.show_axes_state = False
 
-        def get_rotation_matrix(pos, normal, tangent):
-            # Z轴: 法线
-            z_axis = normal / (np.linalg.norm(normal) + 1e-6)
-            # X轴: 切线
-            x_axis = tangent / (np.linalg.norm(tangent) + 1e-6)
-            # Y轴: Z cross X
-            y_axis = np.cross(z_axis, x_axis)
-            y_axis = y_axis / (np.linalg.norm(y_axis) + 1e-6)
-            # 修正 X轴
-            x_axis = np.cross(y_axis, z_axis)
-            x_axis = x_axis / (np.linalg.norm(x_axis) + 1e-6)
-            
-            mat = np.eye(4)
-            mat[0:3, 0] = x_axis
-            mat[0:3, 1] = y_axis
-            mat[0:3, 2] = z_axis
-            mat[0:3, 3] = pos
-            return mat
+        # --- 回调函数 ---
+
+        def toggle_axes_callback(vis):
+            if self.show_axes_state:
+                vis.remove_geometry(self.axes_geometry, reset_bounding_box=False)
+                self.show_axes_state = False
+                print(" -> 坐标轴: 隐藏")
+            else:
+                vis.add_geometry(self.axes_geometry, reset_bounding_box=False)
+                self.show_axes_state = True
+                print(" -> 坐标轴: 显示")
+            return True 
 
         def save_callback(vis):
             filename = f"point_cloud/path_matrix.txt"
-            num_points = len(points)
-            matrices = [None] * num_points
-            
-            # 计算中间点矩阵
-            for i in range(1, num_points - 1):
-                p_curr = points[i]
-                n_curr = normals[i]
-                tangent = points[i+1] - p_curr
-                matrices[i] = get_rotation_matrix(p_curr, n_curr, tangent)
-            
-            # 边界处理
-            mat_0 = matrices[1].copy()
-            mat_0[0:3, 3] = points[0]
-            matrices[0] = mat_0
-            
-            mat_last = matrices[-2].copy()
-            mat_last[0:3, 3] = points[-1]
-            matrices[-1] = mat_last
-            
-            # 确保目录存在
-            os.makedirs(os.path.dirname(filename), exist_ok=True)
-            
             with open(filename, 'w') as f:
                 header = "#r11 r12 r13 tx r21 r22 r23 ty r31 r32 r33 tz 0 0 0 1\n"
                 f.write(header)
-                for mat in matrices:
-                    row1 = mat[0, :]
-                    row2 = mat[1, :]
-                    row3 = mat[2, :]
-                    row4 = mat[3, :]
+                for i in range(len(points)):
+                    mat = self._calculate_rotation_matrix(points[i], normals[i], target_pos)
+                    # 展平写入
+                    row1, row2, row3, row4 = mat[0], mat[1], mat[2], mat[3]
                     line_str = (f"{row1[0]:.6f} {row1[1]:.6f} {row1[2]:.6f} {row1[3]:.6f} "
                                 f"{row2[0]:.6f} {row2[1]:.6f} {row2[2]:.6f} {row2[3]:.6f} "
                                 f"{row3[0]:.6f} {row3[1]:.6f} {row3[2]:.6f} {row3[3]:.6f} "
                                 f"{row4[0]:.0f} {row4[1]:.0f} {row4[2]:.0f} {row4[3]:.0f}\n")
                     f.write(line_str)
-                    
             print(f">>> 变换矩阵已保存: {filename}")
             return False
 
@@ -360,45 +334,52 @@ class InteractivePathApp:
             vis.close()
             return False
 
+        def reset_callback(vis):
+            vis.close()
+            return False
+
+        # 注册按键
         vis.register_key_callback(ord('R'), reset_callback)
         vis.register_key_callback(ord('S'), save_callback)
         vis.register_key_callback(ord('Q'), quit_callback)
+        vis.register_key_callback(ord('T'), toggle_axes_callback)
+        
         vis.run()
         vis.destroy_window()
 
     def run(self):
         while self.keep_running:
             indices = self.run_selection_window()
-            if len(indices) < 2:
-                check = input("未选够点，按回车重试 (q退出): ")
+            
+            # 检查选点数量
+            if len(indices) < 3:
+                print(f"错误: 必须选择 3 个点 (当前选了 {len(indices)} 个)")
+                check = input("按回车重试，输入 'q' 退出: ")
                 if check.strip().lower() == 'q': break
                 continue
             
-            start, end = indices[-2], indices[-1]
-            print(f"计算路径: {start} -> {end}")
+            # 解析选点
+            start_idx = indices[-3]
+            end_idx = indices[-2]
+            target_idx = indices[-1]
+            target_pos = self.points[target_idx]
             
-            points, normals = self._generate_smooth_path(start, end)
+            print(f"路径: {start_idx} -> {end_idx}")
+            print(f"定向目标点索引: {target_idx}")
+            
+            points, normals = self._generate_smooth_path(start_idx, end_idx)
             
             if points is None:
-                print("路径失败")
+                print("路径生成失败，请重新选点")
                 time.sleep(1)
                 continue
 
-            self.run_result_window(points, normals, start, end)
+            self.run_result_window(points, normals, start_idx, end_idx, target_pos)
         print("程序结束")
 
 if __name__ == "__main__":
-    # 请确保路径正确
     PCD_FILE = "point_cloud/target_crop.pcd" 
-    
     if os.path.exists(PCD_FILE):
-        app = InteractivePathApp(PCD_FILE)
-        app.run()
+        InteractivePathApp(PCD_FILE).run()
     else:
         print(f"未找到文件: {PCD_FILE}")
-        # 创建一个简单的测试文件（如果需要测试）
-        # import open3d as o3d
-        # mesh = o3d.geometry.TriangleMesh.create_sphere()
-        # pcd = mesh.sample_points_poisson_disk(5000)
-        # o3d.io.write_point_cloud(PCD_FILE, pcd)
-        # print("已生成测试球体点云，请重新运行。")
