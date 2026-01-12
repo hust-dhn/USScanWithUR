@@ -1,3 +1,4 @@
+
 """
 UR10e机器人运动学
 这是一个用于UR10e机器人运动学计算的Python类，实现正、逆运动学功能
@@ -8,13 +9,10 @@ import numpy as np
 import time         
 import rtde_control  
 import rtde_receive 
-<<<<<<< HEAD
-=======
 import yaml
->>>>>>> origin/master
 
-rtde_c= None
-rtde_r= None
+# rtde_c= None
+# rtde_r= None
 
 class UR10eKine:
     def __init__(self, robot_ip='192.168.253.101'):
@@ -22,16 +20,8 @@ class UR10eKine:
         self.a = [0, -0.6127, -0.57155, 0, 0, 0]           
         self.d = [0.1807, 0, 0, 0.17415, 0.11985, 0.11655]  
         self.alpha = [math.pi/2, 0, 0, math.pi/2, -math.pi/2, 0]  
-        rtde_c = rtde_control.RTDEControlInterface(robot_ip)
-        rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
-<<<<<<< HEAD
-        self.T_end2tcp = np.matrix([
-        [ 0,  1,  0,  0 ],
-        [ 0,  0,  1,  0.07625 ],
-        [ 1,  0,  0,  0.08900436787 ],
-        [ 0,  0,  0,  1 ]
-        ])
-=======
+        self.rtde_c = rtde_control.RTDEControlInterface(robot_ip)
+        self.rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
         self.T_end2tcp = self.load_offset_from_yaml("T_end2tcp.yaml")
 
     def load_offset_from_yaml(self, yaml_file_path):
@@ -45,7 +35,6 @@ class UR10eKine:
         [transform_data[12], transform_data[13], transform_data[14], transform_data[15]]
         ])
      return T    
->>>>>>> origin/master
         
     def THT(self, Theta, A, D, Alpha):
 
@@ -221,13 +210,6 @@ def main():
     theta_jiaodu = [90, -90, 90, -90, 90, -90]
     theta = [theta_jiaodu[i]/180*math.pi for i in range(6)]
     FK_result = ur10eKine.FK(theta)
-<<<<<<< HEAD
-    start_time = time.time()
-    target_pose = ur10eKine.Tmatrix_to_XYZRXRYRZ(FK_result @ np.linalg.inv(ur10eKine.T_end2tcp))
-    end_time = time.time()
-    print(f"转换计算时间: {end_time - start_time} 秒")
-    print("目标位姿:\n",target_pose)
-=======
     FK_result_rmv_offset = FK_result @ np.linalg.inv(ur10eKine.T_end2tcp)
     start_time = time.time()
     target_pose = ur10eKine.Tmatrix_to_XYZRXRYRZ(FK_result_rmv_offset)
@@ -236,26 +218,10 @@ def main():
     print("目标位姿:\n",target_pose)
     target_xyz = target_pose[:3]
     target_rxryrz = target_pose[3:] 
->>>>>>> origin/master
 
     velocity = 0.1 
     acceleration = 0.1 
     rtde_c.moveJ(theta, velocity, acceleration)
-<<<<<<< HEAD
-    print('示教器位姿：\n', rtde_r.getActualTCPPose())
-    
-    print("\n对比:\n",np.array(rtde_r.getActualTCPPose()) - np.array(target_pose))
-    threshold = 1e-3  
-    error_distance = np.linalg.norm(np.array(rtde_r.getActualTCPPose()) - np.array(target_pose))
-    print(f"欧几里得误差距离: {error_distance}")
-    is_close = error_distance < threshold
-    print(f"欧几里得距离是否接近? {is_close} ")
-    rmse = np.sqrt(np.mean((np.array(rtde_r.getActualTCPPose()) - np.array(target_pose))**2))
-    print(f"均方根误差: {rmse}")
-    is_close = rmse < threshold
-    print(f"均方根是否接近? {is_close} ")
-
-=======
     tcp_pose = rtde_r.getActualTCPPose()
     actual_xyz = tcp_pose[:3]       
     actual_rxryrz = tcp_pose[3:]
@@ -277,7 +243,6 @@ def main():
     else:
         print("正运动学测试未通过！")     
 
->>>>>>> origin/master
     # Test2: 逆运动学测试
     IK_result = ur10eKine.IK(FK_result, theta)
     print("逆运动学结果:\n",IK_result)

@@ -16,6 +16,7 @@ import yaml
 import os
 import math 
 
+from camera.ur10e_kine import UR10eKine
 
 # ====================
 # 配置与常量
@@ -108,7 +109,7 @@ class PoseSubscriber(Node):
         T[:3, 3] = t
         
         # 4. 更新控制器中的最新配准位姿
-        self.controller.latest_registration_pose = T
+        self.controller.latest_registration_pos_ros = T
 
 
 class URRobotController:
@@ -117,8 +118,10 @@ class URRobotController:
         初始化控制器并建立通讯连接
         """
         # 存储最新的配准位姿
-        self.latest_registration_pose = None 
-        
+        self.latest_registration_pos_ros = None
+        # load best_transform.txt
+        self.latest_registration_pose = np.loadtxt("/home/zzz/ros2_ws/src/Camera_example/CPP/app/PCLProject/debug_pcd/best_transform.txt").reshape(4,4)
+        print(f"[INFO] 初始配准矩阵:\n{self.latest_registration_pose}")
         # 初始化 ROS 2
         print("[SYSTEM] 正在初始化 ROS 环境")
         rclpy.init(args=None)
@@ -127,8 +130,12 @@ class URRobotController:
         # 连接机器人
         print(f"[ROBOT] 正在连接至机器人: {ip}")
         try:
-            self.rtde_c = rtde_control.RTDEControlInterface(ip)
-            self.rtde_r = rtde_receive.RTDEReceiveInterface(ip)
+            self.ur10e_kine = UR10eKine(ip)
+            # self.rtde_c = rtde_control.RTDEControlInterface(ip)
+            # self.rtde_r = rtde_receive.RTDEReceiveInterface(ip)
+            self.rtde_c = self.ur10e_kine.rtde_c
+            self.rtde_r = self.ur10e_kine.rtde_r
+            print("[SUCCESS] 机器人连接成功")
         except Exception as e:
             print(f"[ERROR] 连接机器人失败: {e}")
             sys.exit(1)
@@ -145,7 +152,7 @@ class URRobotController:
         self.scan_idle_bool = False
 
         # 加载轨迹文件
-        self.traj_file_path = "point_cloud/traj.txt"
+        self.traj_file_path = "point_cloud/path_matrix.txt"
         print(f"[FILE] 正在加载轨迹文件: {self.traj_file_path}")
         try:
             self.trajectory_data = np.loadtxt(self.traj_file_path)
@@ -156,10 +163,13 @@ class URRobotController:
             self.trajectory_data = None
             self.traj_length = 0
         
-        self.count = 0
-        self.T_sen22tcp = load_calibration_matrix("camera/T_cam2tcp.yaml")
+        self.count = 1
+        self.T_sen22tcp = load_calibration_matrix("camera/cfg/T_cam2tcp.yaml")
+        self.T_sen02sen2 = load_calibration_matrix("camera/cfg/T_sensor0_to_sensor2.yaml")
         self.T_end2tcp = load_calibration_matrix("ur10e/cfg/T_end2tcp.yaml")
         self.scan_success_bool = False
+
+
 
     def start(self):
         """启动控制循环、ROS线程和键盘监听"""
@@ -327,43 +337,84 @@ class URRobotController:
         T[:3, 3] = [x, y, z]
         return T
 
+    def save_pose_to_file(self, pose, filename):
+        """
+        将单个位姿数据追加到文件末尾
+        pose: 包含6个值的列表或元组 [x, y, z, rx, ry, rz]
+        """
+        with open(filename, 'a') as f:  # 'a' 表示追加模式
+            # 将位姿数据转换为字符串并写入
+            line = f"{pose[0]:.6f} {pose[1]:.6f} {pose[2]:.6f} "
+            line += f"{pose[3]:.6f} {pose[4]:.6f} {pose[5]:.6f}\n"
+            f.write(line)
+        
+        print(f"位姿已追加到 {filename}")
+
     def scan_mode_loop(self):
         """超声扫描模式执行逻辑""" 
+        q = self.rtde_r.getActualQ()
+        last_q = q.copy()
         while not self.scan_idle_bool:
             if self.count >= self.traj_length:
                 print("[SCAN] 扫描已结束，返回空闲状态")
                 self.current_mode = RobotMode.IDLE
-                self.count = 0
+                self.count = 1
                 self.scan_idle_bool = True
                 return
             
+            T_sen22tcp = self.T_sen22tcp
+            T_sen02sen2 = self.T_sen02sen2
+
+            print(f"[SCAN] 当前采样点索引: {self.count}")
             T_traj2global = self.get_trajectory_pose(self.count)
+            print(f"[SCAN] 目标轨迹矩阵:\n{T_traj2global}")
             if self.latest_registration_pose is not None:
                 # 简化逻辑，此处假设矩阵运算已定义
                 T_latest_inv = np.linalg.inv(self.latest_registration_pose)
+                # print(f"[SCAN] 最新配准矩阵:\n{self.latest_registration_pose}")
                 T_traj2realtime = T_latest_inv @ T_traj2global
-                T_traj2tcp = self.T_sen22tcp @ T_traj2realtime
-                T_tcp2base_current = self.XYZRXRYRZ_to_Tmatrix(self.rtde_r.getActualTCPPose())
-                T_end2base = T_tcp2base_current @ T_traj2tcp
-                T_tcp2base_target = T_end2base @ np.linalg.inv(self.T_end2tcp)
-                scan_pose = self.Tmatrix_to_XYZRXRYRZ(T_tcp2base_target)
+                T_traj2tcp = T_sen22tcp @ T_sen02sen2 @ T_traj2realtime
+                T_tcp2base_current = self.ur10e_kine.FK(q)
+                # T_tcp2base_current = self.XYZRXRYRZ_to_Tmatrix(self.rtde_r.getActualTCPPose())
+                T_traj2base = T_tcp2base_current @ T_traj2tcp
+
+                T_tcp2end = np.linalg.inv(self.T_end2tcp)
+                T_tcp2base_target = T_traj2base @ T_tcp2end
+
+                target_joint = self.ur10e_kine.IK(T_tcp2base_target, last_q)
+                print(f"[SCAN] 目标关节角度: {[round(angle,4) for angle in target_joint]}")
+                self.rtde_c.moveJ(target_joint, 0.2, 0.3)
+                print(f"[SCAN] 机器人已移动至采样点: {self.count}")
+                last_q = target_joint
+
+                # scan_pose = self.Tmatrix_to_XYZRXRYRZ(T_tcp2base_target)
+                self.save_pose_to_file(target_joint, 'ur10e/cfg/joints.txt')
+
+                # scan_pose_1 = self.Tmatrix_to_XYZRXRYRZ(T_traj2base)
+                # self.save_pose_to_file(scan_pose_1, 'ur10e/cfg/poses_traj.txt')
+                # print(f"[SCAN] 计算目标位姿: {scan_pose}")
 
                 # 首尾点精细扫描逻辑
-                if self.count == 0 or self.count == self.traj_length - 1:
-                    print(f"[SCAN] 到达关键采样点: {self.count}")
-                    self.rtde_c.moveL(scan_pose, 0.1, 0.2)
-                    print("[SCAN] 开始停留等待")
-                    while not self.scan_success_bool:
-                        time.sleep(0.001)
-                    print("[SCAN] 停留结束，继续任务")
-                else:
-                    self.rtde_c.servoL(scan_pose, 0.5, 0.5, 0.02, 0.1, 300)
+                # if self.count == 1 or self.count == self.traj_length - 1:
+                #     print(f"[SCAN] 到达关键采样点: {self.count}")
+                #     # self.rtde_c.moveL(scan_pose, 0.1, 0.2)
+                #     # self.rtde_c.moveJ(target_joint, 0.1, 0.2)
+                #     print("[SCAN] 开始停留等待")
+                #     while not self.scan_success_bool:
+                #         time.sleep(0.001)
+                #     print("[SCAN] 停留结束，继续任务")
+                # else:
+                #     # self.rtde_c.moveJ(target_joint, 0.2, 0.3)
+                #     print(f"[SCAN] 移动至采样点: {self.count}")
+                #     # self.rtde_c.servoL(scan_pose, 0.5, 0.5, 0.02, 0.1, 300)
+                #     # self.rtde_c.moveL(scan_pose, 0.1, 0.2)
+                #     pass
 
                 self.count += 1
                 self.scan_success_bool = False
                 
-            if self.count % 50 == 0: 
-                print(f"[FOLLOW] 任务进度: {self.count}/{self.traj_length}")
+            # if self.count % 50 == 0: 
+            print(f"[FOLLOW] 任务进度: {self.count}/{self.traj_length}")
 
     def _on_key_press(self, key):
         """键盘操作响应"""
@@ -374,6 +425,7 @@ class URRobotController:
                 elif key.char == 'c':
                     self.current_mode = RobotMode.IDLE
                 elif key.char == 'u':
+                    self.scan_success_bool = False
                     self.scan_idle_bool = False
                     self.current_mode = RobotMode.SCAN 
                 elif key.char == 't':
@@ -391,6 +443,8 @@ class URRobotController:
                         self.scan_success_bool = True
                 elif key.char == 'q':
                     return False
+                elif key.char == 'r':
+                    self.latest_registration_pose = self.latest_registration_pos_ros
         except AttributeError:
             pass
 
@@ -408,6 +462,8 @@ class URRobotController:
         print("[HELP] [u]: 开启扫描任务")
         print("[HELP] [p]: 打印系统状态")
         print("[HELP] [q]: 安全退出系统")
+        print("[HELP] [h]: 显示帮助信息")
+        print("[HELP] [s]: 扫描模式下确认采样完成")
 
 # ====================
 # 程序入口

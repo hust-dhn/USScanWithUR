@@ -9,8 +9,8 @@ import time
 import rtde_control  
 import rtde_receive 
 
-rtde_c= None
-rtde_r= None
+# rtde_c= None
+# rtde_r= None
 
 class UR10eKine:
     def __init__(self, robot_ip='192.168.253.101'):
@@ -18,8 +18,8 @@ class UR10eKine:
         self.a = [0, -0.6127, -0.57155, 0, 0, 0]           
         self.d = [0.1807, 0, 0, 0.17415, 0.11985, 0.11655]  
         self.alpha = [math.pi/2, 0, 0, math.pi/2, -math.pi/2, 0]  
-        rtde_c = rtde_control.RTDEControlInterface(robot_ip)
-        rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
+        self.rtde_c = rtde_control.RTDEControlInterface(robot_ip)
+        self.rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
         self.T_end2tcp = np.matrix([
         [ 0,  1,  0,  0 ],
         [ 0,  0,  1,  0.07625 ],
