@@ -15,7 +15,7 @@ from scipy.spatial.transform import Rotation as R
 import yaml
 import os
 import math 
-
+import open3d as o3d
 from camera.ur10e_kine import UR10eKine
 
 # ====================
@@ -121,7 +121,7 @@ class URRobotController:
         self.latest_registration_pos_ros = None
         # load best_transform.txt
         self.latest_registration_pose = np.loadtxt("/home/zzz/ros2_ws/src/Camera_example/CPP/app/PCLProject/debug_pcd/best_transform.txt").reshape(4,4)
-        print(f"[INFO] 初始配准矩阵:\n{self.latest_registration_pose}")
+        self.geometries = []
         # 初始化 ROS 2
         print("[SYSTEM] 正在初始化 ROS 环境")
         rclpy.init(args=None)
@@ -152,7 +152,7 @@ class URRobotController:
         self.scan_idle_bool = False
 
         # 加载轨迹文件
-        self.traj_file_path = "point_cloud/path_matrix.txt"
+        self.traj_file_path = "point_cloud/path_matrices.txt"
         print(f"[FILE] 正在加载轨迹文件: {self.traj_file_path}")
         try:
             self.trajectory_data = np.loadtxt(self.traj_file_path)
@@ -163,13 +163,21 @@ class URRobotController:
             self.trajectory_data = None
             self.traj_length = 0
         
-        self.count = 1
+        self.count = 0
         self.T_sen22tcp = load_calibration_matrix("camera/cfg/T_cam2tcp.yaml")
         self.T_sen02sen2 = load_calibration_matrix("camera/cfg/T_sensor0_to_sensor2.yaml")
         self.T_end2tcp = load_calibration_matrix("ur10e/cfg/T_end2tcp.yaml")
         self.scan_success_bool = False
 
+        # self.latest_registration_pose = self.latest_registration_pos_ros
+        print(f"[INFO] 初始配准矩阵:\n{self.latest_registration_pose}")
 
+
+        self.T_sen02tcp = self.T_sen22tcp @ self.T_sen02sen2
+        self.T_tcp2end = np.linalg.inv(self.T_end2tcp)
+        self.T_latest_inv = None
+        self.T_tcp2base_current = np.eye(4)
+        self.q = None
 
     def start(self):
         """启动控制循环、ROS线程和键盘监听"""
@@ -290,52 +298,12 @@ class URRobotController:
             print("[ERROR] 轨迹数据为空")
             return np.eye(4)
             
-        if 0 <= count < self.traj_length:
+        if 0 <= count < 104:
             flat_pose = self.trajectory_data[count]
             return flat_pose.reshape(4, 4)
         else:
             print(f"[ERROR] 索引 {count} 溢出")
             return np.eye(4)
-
-    def Tmatrix_to_XYZRXRYRZ(self, T_matrix):
-        """矩阵转位姿向量"""
-        x = T_matrix[0, 3]
-        y = T_matrix[1, 3]
-        z = T_matrix[2, 3]
-        R_mat = T_matrix[:3, :3]
-        trace = R_mat[0, 0] + R_mat[1, 1] + R_mat[2, 2]
-        cos_angle = (trace - 1) / 2
-        cos_angle = max(-1.0, min(1.0, cos_angle)) # 防止溢出
-        angle = math.acos(cos_angle) 
-        if abs(angle) < 1e-6:
-            return [x, y, z, 0.0, 0.0, 0.0]
-        sin_angle = math.sin(angle) 
-        factor = 1 / (2 * sin_angle)
-        rx = factor * (R_mat[2, 1] - R_mat[1, 2]) * angle
-        ry = factor * (R_mat[0, 2] - R_mat[2, 0]) * angle
-        rz = factor * (R_mat[1, 0] - R_mat[0, 1]) * angle
-        return [x, y, z, rx, ry, rz]
-
-    def XYZRXRYRZ_to_Tmatrix(self, xyzrxryrz):
-        """位姿向量转矩阵"""
-        x, y, z, rx, ry, rz = xyzrxryrz
-        angle = math.sqrt(rx**2 + ry**2 + rz**2)
-        if angle < 1e-6:
-            T = np.eye(4)
-            T[0,3], T[1,3], T[2,3] = x, y, z
-            return T
-        ux, uy, uz = rx / angle, ry / angle, rz / angle
-        cos_a, sin_a = math.cos(angle), math.sin(angle)
-        omc = 1 - cos_a
-        R_mat = np.array([
-            [cos_a + ux**2 * omc, ux * uy * omc - uz * sin_a, ux * uz * omc + uy * sin_a],
-            [uy * ux * omc + uz * sin_a, cos_a + uy**2 * omc, uy * uz * omc - ux * sin_a],
-            [uz * ux * omc - uy * sin_a, uz * uy * omc + ux * sin_a, cos_a + uz**2 * omc]
-        ])
-        T = np.eye(4)
-        T[:3, :3] = R_mat
-        T[:3, 3] = [x, y, z]
-        return T
 
     def save_pose_to_file(self, pose, filename):
         """
@@ -350,65 +318,74 @@ class URRobotController:
         
         print(f"位姿已追加到 {filename}")
 
+    def create_coordinate_frame(self, T, size=0.1, name="frame"):
+        """
+        创建一个带有颜色标记的坐标系
+        红色=X, 绿色=Y, 蓝色=Z
+        """
+        frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0, 0, 0])
+        frame.transform(T)
+        return frame
+
     def scan_mode_loop(self):
         """超声扫描模式执行逻辑""" 
-        q = self.rtde_r.getActualQ()
-        last_q = q.copy()
+        self.geometries.append(self.create_coordinate_frame(np.eye(4), size=0.2))    
+        q_temp = self.rtde_r.getActualQ()
+        T_tcp2base_current_temp = self.ur10e_kine.FK_wo_end(q_temp)
+        self.geometries.append(self.create_coordinate_frame(T_tcp2base_current_temp, size=0.1))
+
         while not self.scan_idle_bool:
             if self.count >= self.traj_length:
                 print("[SCAN] 扫描已结束，返回空闲状态")
                 self.current_mode = RobotMode.IDLE
-                self.count = 1
+                self.count = 0
                 self.scan_idle_bool = True
                 return
-            
-            T_sen22tcp = self.T_sen22tcp
-            T_sen02sen2 = self.T_sen02sen2
-
             print(f"[SCAN] 当前采样点索引: {self.count}")
             T_traj2global = self.get_trajectory_pose(self.count)
             print(f"[SCAN] 目标轨迹矩阵:\n{T_traj2global}")
+            
             if self.latest_registration_pose is not None:
-                # 简化逻辑，此处假设矩阵运算已定义
-                T_latest_inv = np.linalg.inv(self.latest_registration_pose)
+                
                 # print(f"[SCAN] 最新配准矩阵:\n{self.latest_registration_pose}")
-                T_traj2realtime = T_latest_inv @ T_traj2global
-                T_traj2tcp = T_sen22tcp @ T_sen02sen2 @ T_traj2realtime
-                T_tcp2base_current = self.ur10e_kine.FK(q)
-                # T_tcp2base_current = self.XYZRXRYRZ_to_Tmatrix(self.rtde_r.getActualTCPPose())
-                T_traj2base = T_tcp2base_current @ T_traj2tcp
+                T_traj2realtime = self.T_latest_inv @ T_traj2global
+                q_temp = self.rtde_r.getActualQ()
+                T_tcp2base_current_temp = self.ur10e_kine.FK_wo_end(q_temp)
 
-                T_tcp2end = np.linalg.inv(self.T_end2tcp)
-                T_tcp2base_target = T_traj2base @ T_tcp2end
+                # print(f"[SCAN] T_sen02tcp:{T_sen02tcp}")
+                T_sen02base = self.T_tcp2base_current @ self.T_sen02tcp
+                print(f"T_sen02base :{T_sen02base}")
+                T_traj2base = T_sen02base @ T_traj2realtime
+                print(f"T_traj2base :{T_traj2base}")
 
-                target_joint = self.ur10e_kine.IK(T_tcp2base_target, last_q)
+                T_tcp2base_target = T_traj2base @ self.T_tcp2end
+
+                self.geometries.append(self.create_coordinate_frame(T_tcp2base_target, size=0.05))
+
+                print(f"T_tcp2base_target: {T_tcp2base_target}")
+
+                target_joint = self.ur10e_kine.IK_wo_end(T_tcp2base_target, q_temp)
+
                 print(f"[SCAN] 目标关节角度: {[round(angle,4) for angle in target_joint]}")
-                self.rtde_c.moveJ(target_joint, 0.2, 0.3)
+                print(f"[VERIFY] current joint: {q_temp}")
+                print(f"[VERIFY] target joint: {target_joint}")
+                
                 print(f"[SCAN] 机器人已移动至采样点: {self.count}")
-                last_q = target_joint
-
-                # scan_pose = self.Tmatrix_to_XYZRXRYRZ(T_tcp2base_target)
                 self.save_pose_to_file(target_joint, 'ur10e/cfg/joints.txt')
 
-                # scan_pose_1 = self.Tmatrix_to_XYZRXRYRZ(T_traj2base)
-                # self.save_pose_to_file(scan_pose_1, 'ur10e/cfg/poses_traj.txt')
-                # print(f"[SCAN] 计算目标位姿: {scan_pose}")
-
                 # 首尾点精细扫描逻辑
-                # if self.count == 1 or self.count == self.traj_length - 1:
-                #     print(f"[SCAN] 到达关键采样点: {self.count}")
-                #     # self.rtde_c.moveL(scan_pose, 0.1, 0.2)
-                #     # self.rtde_c.moveJ(target_joint, 0.1, 0.2)
-                #     print("[SCAN] 开始停留等待")
-                #     while not self.scan_success_bool:
-                #         time.sleep(0.001)
-                #     print("[SCAN] 停留结束，继续任务")
-                # else:
-                #     # self.rtde_c.moveJ(target_joint, 0.2, 0.3)
-                #     print(f"[SCAN] 移动至采样点: {self.count}")
-                #     # self.rtde_c.servoL(scan_pose, 0.5, 0.5, 0.02, 0.1, 300)
-                #     # self.rtde_c.moveL(scan_pose, 0.1, 0.2)
-                #     pass
+                if self.count == 0 or self.count == self.traj_length - 1:
+                    print(f"[SCAN] 到达关键采样点: {self.count}")
+                    # self.rtde_c.moveL(scan_pose, 0.1, 0.2)
+                    self.rtde_c.moveJ(target_joint, 0.1, 0.2)
+                    print("[SCAN] 开始停留等待")
+                    while not self.scan_success_bool:
+                        time.sleep(0.001)
+                    print("[SCAN] 停留结束，继续任务")
+                else:
+                    self.rtde_c.moveJ(target_joint, 0.2, 0.3)
+                    print(f"[SCAN] 移动至采样点: {self.count}")
+                    pass
 
                 self.count += 1
                 self.scan_success_bool = False
@@ -432,6 +409,8 @@ class URRobotController:
                     self.current_mode = RobotMode.SERVO
                 elif key.char == 'p':
                     q = self.rtde_r.getActualQ()
+                    T_tcp2base_current = self.ur10e_kine.FK_wo_end(q)
+                    print(f"[ccccccccccccc]  :{T_tcp2base_current}")
                     tcp = self.rtde_r.getActualTCPPose()
                     print(f"[PRINT] 关节数据: {[round(x, 4) for x in q]}")
                     print(f"[PRINT] 笛卡尔坐标: {[round(x, 4) for x in tcp]}")
@@ -444,7 +423,23 @@ class URRobotController:
                 elif key.char == 'q':
                     return False
                 elif key.char == 'r':
-                    self.latest_registration_pose = self.latest_registration_pos_ros
+                    self.latest_registration_pose = np.loadtxt("/home/zzz/ros2_ws/src/Camera_example/CPP/app/PCLProject/debug_pcd/best_transform.txt").reshape(4,4)
+                    self.q = self.rtde_r.getActualQ()
+                    self.T_tcp2base_current = self.ur10e_kine.FK_wo_end(self.q)
+                    self.T_latest_inv = np.linalg.inv(self.latest_registration_pose)
+                    print("=============================================")
+                elif key.char == 'm':
+                    print("="*50)
+                    print("可视化说明:")
+                    print("  原点(大) : 机器人基座 (Base)")
+                    print("  坐标系(中) : 机器人末端法兰 (End-Effector)")
+                    print("  坐标系(小) : 工具尖端 (Tool) [黄线连接]")
+                    print("  坐标系(小) : 相机光心 (Camera) [青线连接]")
+                    print("  蓝色点云   : 变换后的局部扫描数据")
+                    print("="*50)
+                    
+                    o3d.visualization.draw_geometries(self.geometries, window_name="Robot System Verification", width=1024, height=768)
+
         except AttributeError:
             pass
 
