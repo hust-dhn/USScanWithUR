@@ -16,7 +16,7 @@ import yaml
 import os
 import math 
 import open3d as o3d
-from camera.ur10e_kine import UR10eKine
+from kinematics.ur10e_kine import UR10eKine
 
 # ====================
 # 配置与常量

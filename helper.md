@@ -119,11 +119,6 @@ ssh-copy-id zzz@14.0.1.49
 # Helper: pip+清华源
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple xxx
 
-<<<<<<< HEAD
-# Helper: 
-
-# Helper: xxxx
-=======
 # Helper: 使用ros通信
 cd /home/zzz/vector6_ws
 ### 设置ros环境
@@ -144,4 +139,3 @@ source ~/vector6_ws/install/setup.bash
 ### 运行订阅程序
 
 # Helper: xxxx
->>>>>>> origin/master

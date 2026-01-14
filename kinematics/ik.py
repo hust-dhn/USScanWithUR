@@ -6,7 +6,7 @@ import os
 # 导入你提供的类
 # 确保 ur10e_kine.py 在同一目录下
 try:
-    from camera.ur10e_kine import UR10eKine
+    from kinematics.ur10e_kine import UR10eKine
 except ImportError:
     print("错误: 找不到 ur10e_kine.py，请确保文件在同一目录下。")
     sys.exit(1)
