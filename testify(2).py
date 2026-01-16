@@ -197,9 +197,9 @@ def main():
             # 开启拖动
             if key == ord('d'):
                 if not is_dragging:
-                    print("--> 进入拖动模式")
                     rtde_c.freedriveMode(FREE_AXES, FREE_FEATURE)
                     is_dragging = True
+                    print("--> 进入拖动模式")
 
             # 保存数据
             elif key == ord('s'):

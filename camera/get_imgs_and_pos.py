@@ -21,11 +21,12 @@ sensor_cog = [0.013, 0.002, 0.060]  # 质心位置，单位：米
 robot_ip = "192.168.253.101"
 
 # 相机参数（不再使用 OpenCV VideoCapture）
+
 IMG_WIDTH = 1600
 IMG_HEIGHT = 1200
 
 # 图像和位姿存储参数
-NUM_POSES = 30  # 生成30个位姿（减少但增加多样性）
+NUM_POSES = 10  # 生成30个位姿（减少但增加多样性）
 IMG_DIR = "camera/imgs/"  # 单相机图像文件夹
 ROBOT_POS_FILE = "camera/cfg/robot_pos.txt"  # 机器人位姿文件
 IMG_FORMAT = ".jpg"  # 图像格式
@@ -57,7 +58,7 @@ robot_stop_event = threading.Event()    # 停止机器人线程的事件
 freedrive_event = threading.Event()     # 自由拖动模式启用标志
 
 # 扫描控制
-FRAMES_PER_POSE = 3  # 每个位姿保存的帧数（每个位姿拍3张，且每张对应一行位姿）
+FRAMES_PER_POSE = 1  # 每个位姿保存的帧数（每个位姿拍3张，且每张对应一行位姿）
 
 
 # ====================
